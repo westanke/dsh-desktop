@@ -73,7 +73,7 @@
 | --- | --- | --- |
 | `tools/build.sh` | 直调 `K2JVMCompiler` 编译（不用 Gradle）；按 `TARGET_PLATFORM` 过滤 skiko 运行时；缺编译器依赖自动从 Maven 下 | `build/classes`、`build/dsh-desktop.jar` |
 | `tools/package.sh` | 编译 → 打 jar → jpackage → **补桌面入口重打 deb**；Windows 分支出 app-image + zip（有 WiX 时另出 msi） | `dist/dsh-desktop_<ver>-1_<arch>.deb` / `dist/dsh-desktop-<ver>-windows-x64.zip` |
-| `tools/fetch-platform.sh` | 拉取目标平台的 skiko 原生库：先找本地种子（`lib/`、`tools/windows-libs/`），再走 Maven，下完用 `zipfile` 校验不是 HTML | 落进平台库里那份 `skiko-awt-runtime-<平台>-0.8.18.jar` |
+| `tools/fetch-platform.sh` | 拉取目标平台的 skiko 原生库：先找本地种子（`lib/` 里那份、以及历史上放在 tools 下的 Windows 那份），再走 Maven，下完用 `zipfile` 校验不是 HTML | 落进平台库里那份 `skiko-awt-runtime-<平台>-0.8.18.jar` |
 | `tools/docs-check.sh` | 文档门禁（28 项） | 退出码 0/1 |
 | `tools/verify-history.sh` | 真实历史解析验证（含专用块分布、耗时可算率） | 退出码 0 / 2（回归）/ 3（输入） |
 | `tools/VerifyHistory.kt` | 上面脚本的验证主体 | — |
