@@ -1,0 +1,236 @@
+# 代码地图（CODEMAP）
+
+> **这份文件是给"要改代码的人/agent"看的**，不是给用户看的。
+> 两件事必须与代码一致：**目录结构**（哪个文件干什么）与**接口**（哪个端点谁在用）。
+>
+> **改完代码必须回来改这里。** `tools/docs-check.sh` 会双向校验：
+> 表格里写的文件必须真实存在；`src/` 下每个 `.kt` 必须在表里出现。
+> 只在表里加、不在代码里做，或者反过来，都会让门禁变红。
+
+---
+
+## A. 目录结构
+
+### A.1 仓库顶层
+
+| 路径 | 作用 |
+| --- | --- |
+| `src/main/kotlin/io/github/westanke/dshdesktop/` | 全部源码（33 个文件，约 11 260 行） |
+| `lib/` | 运行时依赖 50 个 jar（Compose、Skiko、OkHttp、序列化） |
+| `tools/` | 构建、打包、门禁、图标、mock 服务端 |
+| `docs/project/` | 制度文档（本文件在这） |
+| `.github/workflows/` | CI、发布、镜像同步（见 A.4） |
+| `version.txt` | 版本号**唯一来源**，`build.sh` / `package.sh` / 门禁都读它 |
+| `build-windows.bat` | Windows 入口，只是 tools 下两个 shell 脚本的薄封装 |
+| `LICENSE` / `NOTICE` | AGPL-3.0 全文 / 第三方组件与许可声明 |
+| `build/` | 编译产物与中间目录（不进版本控制） |
+| `dist/` | 给用户的安装包 |
+| `AGENTS.md` | 工程宪法（先读它） |
+
+### A.2 源码文件（新增/改名/删除都必须同步这张表）
+
+路径前缀统一省略为 `src/`，完整路径是 `src/main/kotlin/io/github/westanke/dshdesktop/<文件名>`。
+
+| 文件 | 行 | 职责 | 关键符号 | 谁用它 |
+| --- | --- | --- | --- | --- |
+| `src/Main.kt` | 210 | 入口：落盘目录探测（skiko 原生库目录 + tmpdir）、桌面图标兜底、窗口、全局快捷键、**`-Ddsh.openPath=` 启动参数定位文件** | `main()`、`ensureWritableDirs()`、`usableDir()`、`nativeDirCandidates()`、`tempDirCandidates()`、`ensureDesktopShortcut()`、`desktopDir()` | 无（JVM 入口） |
+| `src/Enums.kt` | 29 | 三个口径固定的枚举（连接态 / 导航页 / 抽屉栏目） | `ConnectionState`、`Nav`、`ChatPanel` | 全部 |
+| `src/AppState.kt` | 792 | 状态机本体：连接、会话列表、历史分页、事件分发、审批、发送 | `AppState`、`connect()`、`autoConnect()`、`bootstrap()`、`refreshSessions()`、`loadHistory()`、`sendMessage()`、`decideApproval()`、`handleEvent()`、`adoptDevice()`、`human()` | 全部 `ui/*` |
+| `src/AppStateProjections.kt` | 351 | 会话内能力：投影同步、权限档位、Agent Preset、断档检测、附件发送、后台任务、工作区管理 | `applyProjections()`、`clearProjections()`、`noteBaseline()`、`resyncHistory()`、`adoptCapabilities()`、`lacksCapability()`、`loadPermissionCatalog()`、`applyPermissionPreset()`、`loadAgentPresets()`、`chooseAgentPreset()`、`addAttachments()`、`sendMessageWithAttachments()`、`refreshJobs()`、`loadJobOutput()`、`killJob()`、`renameWorkspace()`、`deleteWorkspace()`、`seqGapHint`、`hasTodos` | `AppState`、`ui/ChatScreen`、`ui/ChatSidePanel`、`ui/Composer`、`ui/Sidebar` |
+| `src/AppStateSettings.kt` | 205 | 设置域：Provider / 凭据 / 模型发现、插件清单与启停 | `loadProviders()`、`saveProvider()`、`resetProviderModels()`、`deleteProvider()`、`createProvider()`、`discoverModels()`、`loadPlugins()`、`togglePlugin()` | `ui/ModelsScreen`、`ui/PluginsScreen` |
+| `src/AppStateChat.kt` | 96 | 聊天域的低频动作（按域拆分，见 `AppState` 构造参数注释） | `forkSession()`、`loadCommands()`、`runCommand()`、`refreshQuestions()`、`answerQuestion()`、`stats` | `ui/Sidebar`、`ui/ChatScreen`、`ui/Composer` |
+| `src/AppStateFiles.kt` | 399 | 文件域动作：浏览、**按类型分流预览**、上传、下载、删除、编辑保存（ETag）、移动/重命名、**下载后交系统打开** | `refreshRoots()`、`previewEntry()`、`loadPreview()`、`textPreview()`、`openEntryExternally()`、`openAbsolutePath(preview=)`、`uploadFile()`、`downloadEntry()`、`deleteEntry()`、`createEntry()`、`refreshTrash()`、`restoreTrash()`、`openAbsolutePath()`、`startEditing()`、`saveDraft()`、`cancelEditing()`、`moveEntry()` | `ui/FilesScreen`、`ui/ChatScreen` |
+| `src/data/DshApi.kt` | 874 | **唯一网络边界**：上游 kotlin-sdk 的 `DshWorkspaceClient`（含 provider / plugin / job / workspace 管理） | `DshWorkspaceClient`、`execute()`、`executeJson()`、`ensureSuccess()`、`endpoint()`、`WorkspaceApiException` | `AppState*` |
+| `src/data/ApiExt.kt` | 311 | SDK 没覆盖的端点：会话列表、历史分页、路径反查、提问、附件、插件清单 | `listChatSessions()`、`listMessagesPage()`、`resolvePath()`、`answerQuestion()`、`uploadEntry()`、`PromptPart`、`sendMessageParts()`、`uploadSessionAttachment()`、`readAttachment()`、`listPlugins()`、`setPluginLoaded()`、`ChatSession` | `AppState*` |
+| `src/data/Attachments.kt` | 54 | 待发送附件的内存表示与 MIME 猜测 | `PendingAttachment`、`MAX_ATTACHMENT_BYTES`、`guessMediaType()` | `AppStateProjections`、`ui/Composer` |
+| `src/data/ChatHistory.kt` | 382 | **唯一历史投影出口**：事件 → 可渲染条目（含图片附件引用） | `parseHistory()`、`unwrapEvent()`、`mergeToolRuns()`、`contentAttachments()`、`HistoryPage`、`ChatItem`（7 个子类）、`DeliverableFile`、`ChatStats`、`chatStats()` | `AppState`、`AppStateChat`、`ui/ChatScreen` |
+| `src/data/SessionProjections.kt` | 201 | 投影解析：TODO、权限档位、断档 seq、按轮次轨迹（纯函数，无 Compose） | `TodoItem`、`PermissionState`、`TraceTurn`、`TraceStep`、`parseTodos()`、`parsePermission()`、`parseMaxSeq()`、`buildTrace()` | `AppStateProjections`、`ui/ChatSidePanel` |
+| `src/data/ToolBlockView.kt` | 263 | 工具调用的**专用视图分发**（纯函数，解析失败一律回落 Generic） | `ToolBlockView`、`toolBlockView()`、`toolActionPhrase()`、`extractReadBody()`、`stripAnsiEscapes()`、`toolDurationMs()` | `ui/ToolBlocks`、`tools/VerifyHistory.kt` |
+| `src/data/Markdown.kt` | 489 | Markdown **解析层**（纯函数，无 Compose 依赖） | `parseMarkdown()`、`parseInline()`、`parseTableRow()`、`normalizeRow()`、`looksLikeTableRow()`、`MdBlock`、`InlineSpan` | `ui/MarkdownView`、`tools/VerifyMarkdown.kt` |
+| `src/data/AppStorage.kt` | 192 | 本地配置、**缓存目录**、令牌加密 | `AppStorage`、`root()`、`cacheRoot()`、`ConnectionProfile`、`UiPrefs`、`appJson` | `Main`、`AppState`、`AppStateFiles` |
+| `src/data/FileKinds.kt` | 267 | **文件类型判定与文本解码**（纯函数）：扩展名分类、内容降级、BOM/UTF-8/GBK 解码、图片魔数、体积格式化 | `FileKind`、`FileType`、`PreviewExtra`、`classifyFile()`、`refineByContent()`、`decodeText()`、`looksBinary()`、`imageFormatOf()`、`formatFileSize()`、`MAX_TEXT_PREVIEW_BYTES`、`MAX_IMAGE_BYTES` | `AppStateFiles`、`ui/FilesScreen`、`tools/VerifyFileKinds.kt` |
+| `src/data/SystemOpen.kt` | 104 | **交给系统默认程序打开**（跨平台：Windows rundll32/start、Linux xdg-open/gio、兜底 Desktop.open） | `openWithSystem()` | `AppStateFiles` |
+| `src/ui/App.kt` | 182 | 主壳：侧栏 + 内容区（`nav` 五页切换）、Toast、**大图预览层**、`PageHeader()` | `App()`、`MainShell()`、`ToastHost()`、`ImagePreviewHost()`、`PageHeader()` | `Main` |
+| `src/ui/Theme.kt` | 345 | 设计令牌与**主题预设**：`Tokens`、5 套 `Palette`、`resolvePalette()`、`AppColors` | `Tokens`、`Palette`、5 个预设常量、`AllPalettes`、`ThemeChoices`、`resolvePalette()`、`LocalAppColors`、`AppTheme()` | 全部 `ui/*` |
+| `src/ui/Components.kt` | 141 | 通用零件：卡片、空态、状态点、加载块、外链、单行省略 | `AppCard()`、`SectionLabel()`、`EmptyState()`、`StatusDot()`、`LoadingBlock()`、`ElidedText()` | 全部 `ui/*` |
+| `src/ui/MarkdownView.kt` | 396 | Markdown **渲染层**：表格（横向滚动 + 列宽自适应 + 斑马纹）、标题、列表、引用、代码块 | `MarkdownText()`、`MarkdownTable()`、`CodeBlock()`、`columnWidths()`、`copyToClipboard()` | `ui/ChatScreen` |
+| `src/ui/RemoteImage.kt` | 127 | 会话图片附件：按需拉取 + LRU 缓存 + 大图预览状态 | `RemoteImage()`、`ImageStrip()`、`ImagePreview`、`clearImageCache()` | `ui/ChatScreen`、`ui/App` |
+| `src/ui/ConnectScreen.kt` | 175 | 连接页：地址 + 一次性配对码 | `ConnectScreen()` | `ui/App` |
+| `src/ui/ChatScreen.kt` | 707 | 会话页：页头（抽屉开关 / 模型 / 推理等级 / Agent 预设）、消息流、断档提示、装配 | `ChatScreen()`、`ChatTopBar()`、`ChatPanelToggles()`、`ModelPicker()`、`MessageRow()`、`CollapsibleBlock()`、`NoticeBar()` | `ui/App` |
+| `src/ui/ChatSidePanel.kt` | 461 | 会话右侧抽屉：待办 / 轨迹 / 后台任务 / 服务端能力面 | `ChatSidePanel()`、`TodosBody()`、`TraceBody()`、`JobsBody()`、`ServerBody()` | `ui/ChatScreen` |
+| `src/ui/Sidebar.kt` | 666 | 侧栏：品牌、通栏「新会话」（含工作区改名/移除）、五页导航、工作区头、会话行菜单、身份卡 | `Sidebar()`、`NavItem()`、`SectionHeader()`、`SessionRow()`、`RenameDialog()`、`relativeTime()` | `ui/App` |
+| `src/ui/Composer.kt` | 542 | 输入区：Enter 发送 / Shift+Enter 换行、插话、`/` 命令候选、**附件托盘**、**权限档位下拉** | `Composer()`、`PermissionPill()`、`AttachmentTray()`、`ImageChip()`、`pickAttachments()` | `ui/ChatScreen` |
+| `src/ui/ToolBlocks.kt` | 325 | 工具专用块渲染：read / bash / edit / 通用 | `ToolCallBlock()`、`ReadBody()`、`TerminalBody()`、`DiffBody()`、`GenericBody()` | `ui/ChatScreen` |
+| `src/ui/ChatPanels.kt` | 240 | 审批卡片（可代签）、交付物卡片、统计一行 | `ApprovalPanel()`、`DeliverableCard()`、`ChatStatsBar()` | `ui/ChatScreen` |
+| `src/ui/FilesScreen.kt` | 679 | 文件页：授权根 chip / 列表 / **按类型分流的预览**（Markdown 渲染 · 图片 · 源码 · 交系统）+ 编辑器 + 移动 | `FilesScreen()`、`RootChips()`、`FileListPane()`、`PreviewPane()`、`TypeBadge()`、`MiniAction()`、`MarkdownPreviewPane()`、`SourcePane()`、`ImagePane()`、`UnsupportedPane()` | `ui/App` |
+| `src/ui/ModelsScreen.kt` | 486 | 模型页：供应商卡片、编辑（baseURL/密钥）、发现模型、自定义 provider、全局模型目录 | `ModelsScreen()`、`ProviderCard()`、`ProviderEditor()`、`CreateProviderDialog()` | `ui/App` |
+| `src/ui/PluginsScreen.kt` | 246 | 插件页：清单、启停开关、检查更新、`available:false` 的解释 | `PluginsScreen()`、`PluginCard()` | `ui/App` |
+| `src/ui/SettingsScreen.kt` | 321 | 设置页：连接信息、设备、主题、关于 | `SettingsScreen()`、`scopeLabel()` | `ui/App` |
+
+### A.3 工具与资源
+
+| 路径 | 作用 | 产出/副作用 |
+| --- | --- | --- |
+| `tools/build.sh` | 直调 `K2JVMCompiler` 编译（不用 Gradle）；按 `TARGET_PLATFORM` 过滤 skiko 运行时；缺编译器依赖自动从 Maven 下 | `build/classes`、`build/dsh-desktop.jar` |
+| `tools/package.sh` | 编译 → 打 jar → jpackage → **补桌面入口重打 deb**；Windows 分支出 app-image + zip（有 WiX 时另出 msi） | `dist/dsh-desktop_<ver>-1_<arch>.deb` / `dist/dsh-desktop-<ver>-windows-x64.zip` |
+| `tools/fetch-platform.sh` | 拉取目标平台的 skiko 原生库：先找本地种子（`lib/`、`tools/windows-libs/`），再走 Maven，下完用 `zipfile` 校验不是 HTML | 落进平台库里那份 `skiko-awt-runtime-<平台>-0.8.18.jar` |
+| `tools/docs-check.sh` | 文档门禁（28 项） | 退出码 0/1 |
+| `tools/verify-history.sh` | 真实历史解析验证（含专用块分布、耗时可算率） | 退出码 0 / 2（回归）/ 3（输入） |
+| `tools/VerifyHistory.kt` | 上面脚本的验证主体 | — |
+| `tools/verify-markdown.sh` | Markdown 解析验证：22 条内置用例 + 真实会话表格形状断言（**至少 1 张表、无空表、每行宽度等于列数**） | 退出码 0 / 2（真实数据形状不对）/ 3（输入不可用）/ 4（内置用例失败） |
+| `tools/VerifyMarkdown.kt` | 上面脚本的验证主体（直接调 `data/Markdown.kt` 的纯函数） | — |
+| `tools/verify-files.sh` | 文件类型判定与解码验证（49 条用例） | 退出码 0/1 |
+| `tools/VerifyFileKinds.kt` | 上面脚本的验证主体（直接调 `data/FileKinds.kt` 的纯函数） | — |
+| `tools/IconGen.java` | 生成 5 档应用图标（Java2D） | `build/icons/hicolor/*` |
+| `tools/linux/dsh-desktop.desktop` | 菜单项模板 | 装进 `/usr/share/applications` |
+| `tools/linux/postinst-shortcut.sh` | 安装后给用户桌面临一份 | 拼接进 deb 的 postinst |
+| `tools/linux/postrm-shortcut.sh` | 卸载时清理桌面副本 | 拼接进 deb 的 postrm |
+| `tools/fetch-deps.py` | 按 Maven 坐标补传递依赖（`lib/` 的整理脚本） | 写入 `lib/` |
+| `tools/mock-server.py` | 离线服务端，端口 3091 | 本地 HTTP 服务 |
+
+### A.4 CI 与发布（`.github/workflows/`）
+
+| 文件 | 触发 | 干什么 | 关键约束 |
+| --- | --- | --- | --- |
+| `ci.yml` | push `main`、PR、手工 | 编译 + `docs-check` + `verify-files` + `verify-markdown`（linux-x64） | **不产安装包**，必须快；红了不许合并 |
+| `release.yml` | push tag `v*`、手工 | `linux-amd64`（ubuntu-22.04）、`linux-arm64`（ubuntu-22.04-arm）、`windows-x64`（windows-latest）三 job 现场构建，tag 时建 Release + `SHA256SUMS` | 手工触发只构建不发布；arm64 必须断言包里带 arm64 skiko |
+| `mirror-sync.yml` | 每 3 小时、手工 | Gitee（主）→ AtomGit（备）→ GitHub（从）单向 `push --mirror` refs | 用 secret `MIRROR_PAT`，不能用 `github.token`；判据是退出码 |
+| `tools/mock-server.py` | 离线服务端（端口 **3091**，别抢 3090） | 本地 mock 数据 |
+| `tools/portable/run.sh` | 便携包启动脚本 | 打进 tar.gz 根目录 |
+| `tools/fetch-deps.py` | 按坐标补 Maven 传递依赖 | `lib/` |
+| `tools/windows-libs/` | Windows 用 skiko 原生库 | Windows 打包时用 |
+| `build-windows.bat` | Windows 侧 Gradle `packageMsi` | `build\compose\binaries\main\msi\*.msi` |
+
+---
+
+## B. 接口说明
+
+基址 `/api/v1`，Bearer 设备令牌。**所有调用都必须经过 `data/`**，UI 里不许出现 URL。
+
+### B.1 REST：桌面端**已接入**的
+
+| 方法 | 端点 | 用途 | 代码位置 |
+| --- | --- | --- | --- |
+| GET | `healthz` | 连通性与插件版本（免鉴权） | `DshApi.health()` |
+| POST | `pairings/exchange` | 配对码换设备令牌（免鉴权） | `DshApi.exchangePairing()` |
+| GET | `devices/self` | 设备身份、scope、授权根（补齐 `rootIds`） | `DshApi.currentDevice()` |
+| GET | `roots` | 授权根列表 | `DshApi.listRoots()` |
+| GET | `roots/{rootId}/entries` | 目录分页列表 | `DshApi.listEntries()` |
+| GET | `roots/{rootId}/content` | 读文件（预览） | `DshApi.readFile()` |
+| GET | `roots/resolve?path=` | 绝对路径 → rootId + 相对路径 | `ApiExt.resolvePath()` |
+| POST | `roots/{rootId}/entries` | 新建目录 / 空文件；上传走同端点 | `DshApi.createEntry()`、`ApiExt.uploadEntry()` |
+| DELETE | `roots/{rootId}/entries` | 软删除进回收站 | `DshApi.trashEntry()` |
+| GET | `trash` | 回收站列表 | `DshApi.listTrash()` |
+| POST | `trash/{trashId}/restore` | 从回收站恢复 | `DshApi.restoreTrash()` |
+| GET | `chat/sessions` | 会话列表（`archived=true` 取归档） | `ApiExt.listChatSessions()` |
+| POST | `chat/sessions` | 新建会话 | `DshApi.createSessionInWorkspace()` |
+| PATCH | `chat/sessions/{id}` | 重命名 | `DshApi.renameSession()` |
+| POST | `chat/sessions/{id}/archive` | 归档 | `DshApi.archiveSession()` |
+| POST | `chat/sessions/{id}/fork` | 分叉（体 `{atSeq}`，201 返回 `{sessionId}`） | `DshApi.forkSession()` |
+| GET | `chat/sessions/{id}/messages` | 历史（支持 `beforeSeq`、`maxMessages`） | `ApiExt.listMessagesPage()` |
+| POST | `chat/sessions/{id}/messages` | 发送消息 | `DshApi.sendMessage()` |
+| GET | `chat/sessions/{id}/models` | 会话可用模型 | `DshApi.listSessionModels()` |
+| POST | `chat/sessions/{id}/model` | 切换模型 | `DshApi.selectSessionModel()` |
+| GET | `chat/sessions/{id}/approvals` | 待审批列表 | `DshApi.listPendingApprovals()` |
+| POST | `chat/sessions/{id}/approvals/{aid}/decision` | 审批决定 | `DshApi.decideApproval()` |
+| GET | `chat/sessions/{id}/questions` | 待回答提问 | `ApiExt.listSessionQuestions()` |
+| POST | `chat/sessions/{id}/questions/{cid}/answer` | 提交回答 | `ApiExt.answerQuestion()` |
+| GET | `chat/sessions/{id}/commands` | 这个会话的斜杠命令清单 | `DshApi.listSessionCommands()` |
+| POST | `chat/sessions/{id}/commands` | 执行一条斜杠命令 | `DshApi.executeSessionCommand()` |
+| POST | `chat/runs/{sessionId}/cancel` | 停止运行 | `DshApi.cancel()` |
+| GET | `chat/workspaces` | 工作区列表（新建会话时选） | `DshApi.listChatWorkspaces()` |
+| PATCH | `chat/workspaces/{id}` | 工作区重命名 | `DshApi.renameChatWorkspace()` |
+| DELETE | `chat/workspaces/{id}` | 移除工作区（不删目录） | `DshApi.deleteChatWorkspace()` |
+| GET | `chat/agent-presets` | Agent 预设清单 | `DshApi.listAgentPresets()` |
+| PUT | `chat/sessions/{id}/agent-preset` | 切换 Agent 预设 | `DshApi.selectSessionAgentPreset()` |
+| GET | `chat/permission-presets` | 权限档位**候选**清单（当前值只在投影里） | `DshApi.listPermissionPresets()` |
+| POST | `chat/sessions/{id}/messages` | 带 `content[]` 片段发送（text / image / file） | `ApiExt.sendMessageParts()` |
+| POST | `chat/sessions/{id}/attachments` | 上传文件换 `receiptId`（24 MB 上限） | `ApiExt.uploadSessionAttachment()` |
+| GET | `attachments/{id}?sessionId=` | 取图片字节（id 含冒号，须 URL 编码） | `ApiExt.readAttachment()` |
+| GET | `chat/sessions/{id}/jobs` | 后台任务列表 | `DshApi.listSessionJobs()` |
+| GET | `chat/sessions/{id}/jobs/{jid}/output` | 任务输出（`from` 增量续读，`lossy` 提示截断） | `DshApi.readJobOutput()` |
+| POST | `chat/sessions/{id}/jobs/{jid}/kill` | 终止任务（`requested` / `already-finished`） | `DshApi.killSessionJob()` |
+| PUT | `roots/{rootId}/content?path=` | 写文件（`If-Match: <etag>`，缺省 `If-None-Match: *`） | `DshApi.writeFile()`、`AppStateFiles.saveDraft()` |
+| PATCH | `roots/{rootId}/entries` | 移动 / 重命名（体 `{path, destinationPath}`） | `DshApi.moveEntry()`、`AppStateFiles.moveEntry()` |
+| GET | `settings/providers` | 供应商、凭据状态、`revisionByNamespace` | `DshApi.listProviderSettings()` |
+| PATCH | `settings/providers/{id}` | 改配置（带 `expectedRevision`，412 = 别处改过） | `DshApi.updateProvider()` |
+| POST | `settings/providers` | 新建自定义供应商 | `DshApi.createCustomProvider()` |
+| DELETE | `settings/providers/{id}` | 删除自定义供应商 | `DshApi.deleteProvider()` |
+| POST | `settings/providers/{id}/discover` | 拉供应商的可用模型（只是候选） | `DshApi.discoverProviderModels()` |
+| GET | `settings/models` | 全局模型目录（分组 + 失败项） | `DshApi.listModelCatalog()` |
+| GET | `settings/plugins` | 插件清单（`checkUpdates=1` 才查 npm） | `ApiExt.listPlugins()` |
+| PATCH | `settings/plugins` | 启停插件（只改 `dsh.profile.bundles`，返回 `restartRequired`） | `ApiExt.setPluginLoaded()` |
+
+### B.2 REST：已知但**仍未接入**
+
+| 方法 | 端点 | 说明 |
+| --- | --- | --- |
+| GET | `chat/sessions/{id}/messages`（POST 其他形态） | 目前只用「发一条消息」这一形态；批量/编辑形态没有入口 |
+| PATCH | `settings/providers/{id}`（`models: null`） | 已接（`resetProviderModels()`），但只从模型页的「恢复默认目录」进入 |
+
+> 上一轮列在这里的 5 项（jobs / providers / models / agent-presets / permission-presets /
+> workspaces 管理）**已经全部接入**，迁移到 B.1。
+
+### B.3 WebSocket 事件（`AppState.handleEvent()`，共 10 个分支）
+
+| 事件 | 行为 |
+| --- | --- |
+| `connection.ready` | 置为已连接 + **解析 `capabilities` / `bridgeVersion`**（能力位探测） |
+| `chat.session.snapshot` | 记下订阅基线 `cursor`；本地历史落后时重取（断档补偿） |
+| `chat.message.delta` | 按 `kind: text\|reasoning` 追加流式缓冲（**无 `seq`**） |
+| `chat.message.committed` | 清缓冲 + 重取历史 + 刷列表（REST 才是真相） |
+| `chat.session.status` | 同步 `running`；非 running 时收口历史 |
+| `chat.turn.failed` | 转成错误提示 |
+| `chat.approval.requested` / `.resolved` | 刷新待审批计数 |
+| `file.changed` / `file.trashed` | 刷新文件列表 |
+
+### B.4 历史事件（`data/ChatHistory.kt`）
+
+**必须先解包**：每条是 `{type:"event", event:{…}}`，`unwrapEvent()` 负责。
+
+| 内层 `type` | 渲染成 | 备注 |
+| --- | --- | --- |
+| `user/message` | `ChatItem.User`；`source.kind != "user"` 时降级为 `Notice` | 上下文注入不是用户说的话；`content[]` 里的 `image` 块带 `attachmentId`，只留 id、渲染时再拉（`contentAttachments()`） |
+| `assistant/message` | `ChatItem.Assistant` / `ChatItem.Reasoning` | `content` 是块数组，`text` 与 `reasoning` 分开 |
+| `tool/call` | `ChatItem.Tool` → 相邻合并为 `ToolGroup` | 结果靠 `callId` 与 `tool/result` 配对 |
+| `tool/result` | 不单独渲染 | 只作为 `Tool` 的 `result`；顺带算 `durationMs`（`result.time - call.time`，负值丢弃） |
+| `turn/end` | `Notice` | 只在 `error` / `max-tokens` / `aborted`；正常是 `completed` |
+| `deliverables/presented` | `ChatItem.Deliverable`（卡片） | `data.files[] = {path, description}`；点卡片走 `roots/resolve` 定位到文件页 |
+| `step/start`、`step/end`、`job/*`、`turn/start`、`agent/inbox/spliced`、`session/end-seed` | **不渲染** | 改了会污染消息流 |
+
+---
+
+## C. 常见改动路线
+
+| 我要改… | 先动 | 联动 |
+| --- | --- | --- |
+| 消息怎么渲染 | `ui/ChatScreen.kt` 的 `MessageRow()` | 新增 `ChatItem` 子类要改 `data/ChatHistory.kt` 的 `parseHistory`、`chatStats`、`ui/ChatScreen` 的 `when` 三处（穷举，编译会提醒） |
+| Markdown 怎么解析 | `data/Markdown.kt` 的 `parseMarkdown()` | 改完跑 `tools/verify-markdown.sh`；**解析与渲染必须分居两个文件**，解析层不许 import Compose（否则脚本跑不起来） |
+| Markdown 长什么样 | `ui/MarkdownView.kt` 的 `MarkdownText()` / `MarkdownTable()` | 表格列宽在 `columnWidths()`，着色统一走 `Tokens`；单元格内容必须过 `annotatedFrom()` 二次解析行内标记 |
+| 工具块长什么样 | `ui/ToolBlocks.kt` | 分发规则在 `data/ToolBlockView.kt`（纯函数，别在 UI 里嗅探字符串） |
+| 工具名口径变了 | `data/ToolBlockView.kt` 的 `toolActionPhrase()` 与 `toolBlockView()` | 跑 `tools/verify-history.sh` 看「工具专用块」分布是否掉到 Generic |
+| 历史事件解析 | `data/ChatHistory.kt` | 跑 `tools/verify-history.sh`；同步本文 B.4 |
+| 新增一个接口 | `data/ApiExt.kt`（优先）或 `DshApi.kt` | 同步本文 B.1；`AppState` 加动作；`docs-check` 会检查文件表 |
+| 连接 / 重连逻辑 | `AppState.connect()`、`autoConnect()`、`bootstrap()` | `data/AppStorage` 的 profile 字段 |
+| 文件页 | `ui/FilesScreen.kt` + `AppState` 的 `refreshDirectory()` 段 | 预览上限 512 KiB |
+| 新页面 | `ui/App.kt` 的 `Nav` 枚举 + `MainShell` 分支 + `ui/Sidebar.kt` 的 `NavItem` | `Ctrl+1/2/3` 在 `Main.kt`；换页会自动记住（`prefs.lastNav`） |
+| 会话抽屉（待办/轨迹/任务/能力面） | `ui/ChatSidePanel.kt` + `ChatPanel` 枚举 | 投影算法在 `data/SessionProjections.kt`，纯函数，改完直接跑编译即可（没有独立测试） |
+| 权限档位 / 推理等级 / Agent 预设 | `ui/Composer.kt` 的 `PermissionPill()`、`ui/ChatScreen.kt` 的 `ModelPicker()` 与 `more` 菜单 | 权限切换**走 `/permission <preset>` 命令**（内核没有写端点）；目录候选来自 `chat/permission-presets` |
+| 附件发送与图片显示 | `data/Attachments.kt` + `AppStateProjections.sendMessageWithAttachments()` + `ui/RemoteImage.kt` | 图片内联 base64、文件先换 `receiptId`；`receiptId` 只对同一次 prompt 有效，**不能存起来复用** |
+| Provider / 插件 | `ui/ModelsScreen.kt`、`ui/PluginsScreen.kt` + `AppStateSettings.kt` | 写操作必须带 `expectedRevision`；密钥只写不读 |
+| 换主题 / 加主题 | `ui/Theme.kt`：加一个 `Palette` 常量，挂进 `AllPalettes` | 设置页的色卡由 `ThemeChoices` 自动列出来，UI 不用改 |
+| 颜色 / 圆角 / 间距 | 颜色只从 `LocalAppColors` 或 `MaterialTheme.colorScheme` 取；尺寸只从 `Tokens` 取 | **组件里不许出现 `Color(0x…)`**（`docs-check` 不查，靠评审；连接页曾漏掉一处 `Color.White`） |
+| 侧栏 / 会话行 | `ui/Sidebar.kt` | 相对时间口径在 `relativeTime()`（毫秒/秒兜底判断） |
+| 文件页授权根 | `ui/FilesScreen.kt` 的 `RootChips()` | 横向 chip，别再改回竖列（会挤掉文件列表） |
+| 安装包 / 图标 / 桌面入口 | `tools/package.sh`、`tools/linux/`、`tools/IconGen.java` | 见 `PITFALLS.md` 三条打包坑 |
+| 版本号 | `tools/package.sh` 的 `VERSION` | 按 `AGENTS.md` 第 3 节同步五处 |
+
+---
+
+## D. 维护纪律（门禁会查）
+
+1. **新增 / 删除 / 改名 `.kt`** → 同步 A.2 表格。`docs-check.sh` 会双向比对：表里有而文件不存在、文件存在而表里没有，**都算失败**。
+2. **新增一个已在用的端点** → 同步 B.1；只是 SDK 有但没用，放 B.2。
+3. **新增 WebSocket 事件分支** → 同步 B.3；**新增历史事件渲染** → 同步 B.4 并补 `PITFALLS.md`。
+4. **改了某文件的行数** → A.2 的"行"列允许滞后，但超过 800 行必须去 `TECH-DEBT.md` 登记。
+5. 本文只写**事实**（哪个文件、哪个端点、谁在调），不写"建议""可以考虑"。设计理由写 `ARCHITECTURE.md`。

@@ -1,0 +1,86 @@
+DSH Desktop（dsh-desktop）
+Copyright (c) 2026 westanke
+
+本程序以 GNU Affero 通用公共许可证第 3 版（AGPL-3.0）发布，全文见 LICENSE。
+它通过 HTTP/WebSocket 与 dsh-remote-bridge 通信，是一个独立客户端，
+不包含、不链接 dsh-remote-bridge 的源码。
+
+
+────────────────────────────────────────────────────────────────────
+一、为什么把 jar 直接放进 lib/
+────────────────────────────────────────────────────────────────────
+本项目没有引入 Gradle 依赖解析（构建机内存受限，Gradle 起不来），
+构建脚本 tools/build.sh 直接调 K2JVMCompiler，classpath 就是 lib/ 下的 jar。
+因此 lib/ 入库是刻意为之：**仓库里是什么，就编译出什么**，构建可复现，
+且不需要联网也能编译。
+
+分平台的原生运行时（skiko）体积大且平台相关，不做全量入库：
+
+  lib/skiko-awt-runtime-linux-x64-0.8.18.jar   入库（开发机即 x64 Linux）
+  tools/platform-libs/<platform>/              由 tools/fetch-platform.sh 按需下载
+  tools/windows-libs/                          本地种子，不入库
+
+build.sh 会按 TARGET_PLATFORM 只保留匹配的那一份运行时，其余从 classpath 剔除。
+
+
+────────────────────────────────────────────────────────────────────
+二、第三方组件与许可
+────────────────────────────────────────────────────────────────────
+以下组件的版权归各自作者所有，本项目仅以未修改的二进制形式随包分发。
+
+1) Compose Multiplatform 1.7.3（桌面端 UI 工具包）
+   JetBrains s.r.o. — Apache License 2.0
+   https://github.com/JetBrains/compose-multiplatform
+   涉及：foundation-desktop、material-desktop、material3-desktop、
+         material-icons-core-desktop、material-icons-extended-desktop、
+         material-ripple-desktop、runtime-desktop、runtime-saveable-desktop、
+         ui-desktop、ui-geometry-desktop、ui-graphics-desktop、ui-text-desktop、
+         ui-unit-desktop、ui-util-desktop、ui-tooling-preview-desktop、
+         animation-desktop、animation-core-desktop、desktop-jvm
+
+2) Skiko 0.8.18（Kotlin 的 Skia 绑定，Compose 桌面端的绘图后端）
+   JetBrains s.r.o. — Apache License 2.0
+   https://github.com/JetBrains/skiko
+   内嵌 Skia（Google LLC）— BSD 3-Clause
+   https://skia.org
+   涉及：skiko-awt、skiko-awt-runtime-linux-x64 / windows-x64 / linux-arm64
+
+3) Kotlin 标准库与编译器插件 2.1.0
+   JetBrains s.r.o. — Apache License 2.0
+   https://github.com/JetBrains/kotlin
+   涉及：kotlin-stdlib、kotlin-stdlib-common、
+         kotlin-compose-compiler-plugin-embeddable、
+         kotlin-serialization-compiler-plugin-embeddable
+
+4) kotlinx 系列（协程、序列化、时间）
+   JetBrains s.r.o. — Apache License 2.0
+   https://github.com/Kotlin
+   涉及：kotlinx-coroutines-core-jvm、kotlinx-coroutines-swing、
+         kotlinx-serialization-core-jvm、kotlinx-serialization-json-jvm、
+         kotlinx-datetime-jvm、atomicfu-jvm
+
+5) AndroidX（annotation、collection、lifecycle）
+   The Android Open Source Project — Apache License 2.0
+   https://developer.android.com/jetpack
+   涉及：androidx-annotation-jvm、annotation-jvm、androidx-collection-jvm、
+         collection-jvm、lifecycle-common(-jvm)、lifecycle-runtime(-compose/-desktop)、
+         lifecycle-viewmodel(-desktop)、core-common、core-runtime
+
+6) OkHttp 4.12.0 / Okio 3.6.0（HTTP 客户端与 I/O）
+   Square, Inc. — Apache License 2.0
+   https://square.github.io/okhttp/
+
+7) JetBrains Annotations 13.0 / 23.0.0
+   JetBrains s.r.o. — Apache License 2.0
+
+Apache License 2.0 全文见：https://www.apache.org/licenses/LICENSE-2.0
+BSD 3-Clause 全文见：https://opensource.org/licenses/BSD-3-Clause
+
+
+────────────────────────────────────────────────────────────────────
+三、不随包分发的部分
+────────────────────────────────────────────────────────────────────
+- JDK / JRE（jpackage 打包时由本机 JDK 生成运行时镜像，遵循其自身许可）
+- WiX Toolset（仅在 Windows 上构建 MSI 时使用，构建期工具，不随包分发）
+- dsh-remote-bridge（服务端，独立仓库，AGPL-3.0）
+- dsh-companion（安卓端，独立仓库，AGPL-3.0）

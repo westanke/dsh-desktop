@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=DSH Desktop
+Name[zh_CN]=DSH 桌面
+GenericName=Remote Coding Client
+GenericName[zh_CN]=远程编码客户端
+Comment=Native desktop client for DeepSeek Harness over the remote bridge
+Comment[zh_CN]=通过远程桥接连接 DeepSeek Harness 的原生桌面客户端
+Exec=/opt/dsh-desktop/bin/dsh-desktop %U
+Icon=/usr/share/icons/hicolor/256x256/apps/dsh-desktop.png
+Terminal=false
+Categories=Development;IDE;
+Keywords=dsh;deepseek;harness;ai;remote;
+StartupNotify=true
+# 必须与 AWT 实际给出的 WM_CLASS 一致，否则任务栏/Dock 会认为"这是另一个程序"，
+# 出现双图标、或点图标不聚焦已有窗口。实测值取自 xwininfo（2026-10-21）：
+#   "io-github-westanke-dshdesktop-MainKt" "io-github-westanke-dshdesktop-MainKt"
+StartupWMClass=io-github-westanke-dshdesktop-MainKt

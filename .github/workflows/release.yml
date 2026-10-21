@@ -1,0 +1,179 @@
+name: 打安装包
+
+# 在 GitHub 的机器上现场构建三份产物，不依赖任何本机环境：
+#   · Linux amd64 → deb
+#   · Linux arm64 → deb（arm64 机器上原生构建，交叉编译 jpackage 不可行）
+#   · Windows x64 → 免安装 zip（镜像里有 WiX 时另出 msi）
+#
+# 触发：
+#   · push tag v*  → 构建 + 建 GitHub Release 并上传资产
+#   · 手工 dispatch → 只构建，产物留在 Actions 的 artifact 里（用来在打 tag 前先验一遍）
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Linux amd64 ────────────────────────────────────────────────────────
+  linux-amd64:
+    name: deb · amd64
+    # 用 22.04 而不是 24.04：构建机的 glibc 决定 jpackage 运行时镜像能跑多老的系统，
+    # 目标用户里有 UOS 20（Debian 10 底子，glibc 2.28），越老的构建机兼容面越宽。
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 准备平台运行时（skiko linux-x64）
+        run: bash tools/fetch-platform.sh linux-x64
+
+      - name: 编译并打 deb
+        run: bash tools/package.sh
+
+      - name: 校验
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+          dpkg-deb -I dist/*.deb
+          dpkg-deb -c dist/*.deb | grep -q usr/share/applications/dsh-desktop.desktop
+          echo "✓ 包内桌面入口就位"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-amd64
+          path: dist/*.deb
+          if-no-files-found: error
+
+  # ── Linux arm64 ────────────────────────────────────────────────────────
+  linux-arm64:
+    name: deb · arm64
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 确认机器确实是 arm64
+        run: test "$(uname -m)" = "aarch64" && echo "✓ aarch64"
+
+      - name: 准备平台运行时（skiko linux-arm64）
+        # lib/ 里入库的只有 x64 那份，arm64 必须现场拉
+        run: bash tools/fetch-platform.sh linux-arm64
+
+      - name: 编译并打 deb
+        env:
+          TARGET_PLATFORM: linux-arm64
+        run: bash tools/package.sh
+
+      - name: 校验
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+          dpkg-deb -I dist/*.deb | grep -q 'Architecture: arm64'
+          dpkg-deb -c dist/*.deb | grep -q 'skiko-awt-runtime-linux-arm64'
+          dpkg-deb -c dist/*.deb | grep -q usr/share/applications/dsh-desktop.desktop
+          echo "✓ 架构与桌面入口都对"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-arm64
+          path: dist/*.deb
+          if-no-files-found: error
+
+  # ── Windows x64 ────────────────────────────────────────────────────────
+  windows-x64:
+    name: zip · windows-x64
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 编译与打包逻辑和 UOS 共用同一份 bash 脚本（Git Bash 自带 bash / cygpath / curl）
+      - name: 准备平台运行时（skiko windows-x64）
+        shell: bash
+        run: bash tools/fetch-platform.sh windows-x64
+
+      - name: 编译并打包
+        shell: bash
+        run: bash tools/package.sh
+
+      - name: 校验
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lh dist/
+          unzip -l dist/dsh-desktop-*-windows-x64.zip | grep -q 'dsh-desktop.exe'
+          echo "✓ zip 里有主程序"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            dist/*.zip
+            dist/*.msi
+          if-no-files-found: warn
+
+  # ── 汇总发布 ───────────────────────────────────────────────────────────
+  publish:
+    name: 发布 Release
+    needs: [linux-amd64, linux-arm64, windows-x64]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 生成校验和
+        run: |
+          set -euo pipefail
+          cd dist
+          ls -lh
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: 建 Release 并上传
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd dist
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber ./*
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "DSH Desktop $TAG" \
+              --generate-notes \
+              ./*
+          fi
+          echo "✓ 已发布 $TAG"

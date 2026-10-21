@@ -1,0 +1,64 @@
+name: CI
+
+# 提交门禁：只做"能不能编译 + 制度文档是否与代码一致 + 纯函数用例是否过"。
+# 不产出安装包（那是 release.yml 的活），所以跑得快，适合每次 push/PR 都跑。
+#
+# 为什么只跑 linux-x64：
+#   编译产物与平台无关，跨平台差异全部集中在 skiko 的原生运行时选择上。
+#   那条分支由 release.yml 在真实的 Windows / arm64 机器上验证，比在这里交叉编译更可信。
+
+on:
+  push:
+    branches: [main]
+    tags-ignore: ['**']        # tag 推送交给 release.yml，别重复跑
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 编译与门禁（linux-x64）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出
+        uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 准备平台运行时（skiko linux-x64）
+        run: bash tools/fetch-platform.sh linux-x64
+
+      - name: 编译
+        run: bash tools/build.sh jar
+
+      - name: 文档门禁
+        run: bash tools/docs-check.sh
+
+      - name: 文件类型与解码用例
+        run: bash tools/verify-files.sh
+
+      - name: Markdown 解析用例
+        run: bash tools/verify-markdown.sh
+
+      - name: 汇总产物信息
+        if: always()
+        run: |
+          echo "### 编译产物" >> "$GITHUB_STEP_SUMMARY"
+          ls -lh build/dsh-desktop.jar >> "$GITHUB_STEP_SUMMARY" 2>&1 || true

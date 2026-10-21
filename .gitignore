@@ -1,0 +1,41 @@
+# ── 构建产物与中间目录 ─────────────────────────────────────────────
+# build/ 里是编译产物和 jpackage 的大量中间文件（本机实测 3.6 GB），绝不入库。
+build/
+dist/
+.build-tmp/
+.gradle/
+.kotlin/
+*.class
+*.jar.tmp
+
+# ── 崩溃与取证残留 ────────────────────────────────────────────────
+hs_err_pid*.log
+replay_pid*.log
+core.*
+*.hprof
+.verify-*/
+.verify-md/
+.verify-files/
+
+# ── 本地环境 ──────────────────────────────────────────────────────
+local.properties
+.secrets/
+_bak/
+*.pyc
+__pycache__/
+.DS_Store
+Thumbs.db
+
+# ── 跨平台运行时依赖（按需下载，不入库）──────────────────────────
+# lib/ 里的 50 个 jar 是入库的（项目没有包管理器，仓库是什么就编译出什么）。
+# 但 skiko 的**平台运行时**体积大且分平台，只入库开发机用的 linux-x64（在 lib/ 里），
+# 其余平台由 tools/fetch-platform.sh 在 CI 上现场拉取：
+#   tools/platform-libs/<platform>/
+tools/platform-libs/*
+!tools/platform-libs/.gitkeep
+tools/windows-libs/
+
+# ── 编辑器 ────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
