@@ -272,6 +272,8 @@ JUnit + Gradle 那套无处安放。这是 `TECH-DEBT.md` 的 **DEBT-001**，不
 - `Gitee 附件字段名是 file，文档写的 file[] 是错的`
 - `Gitee API 的 POST 不带 Content-Type 一律 400`
 - `push --mirror 搬不了 Release`
+- `历史只给最近一段，早期交付物不翻页就不出现`
+- `交付物事件有两个名字`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 > `tools/docs-check.sh` 会检查两边是否一一对应。

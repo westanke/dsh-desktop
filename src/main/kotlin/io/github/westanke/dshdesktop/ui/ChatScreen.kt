@@ -129,6 +129,21 @@ fun ChatScreen(state: AppState) {
                     itemsIndexed(state.chatItems, key = { _, item -> item.id }) { _, item ->
                         MessageRow(state, item)
                     }
+                    // 历史默认只给最近约 300 条，更早轮次的交付物靠后台回溯才捞得到，
+                    // 它们不在消息流里，单独画在末尾——否则"打开历史会话就没有文件卡"。
+                    val outsideDeliverables = state.deliverablesOutsideStream()
+                    if (outsideDeliverables.isNotEmpty()) {
+                        item(key = "session-deliverables") {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    "更早轮次的产出文件",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = colors.textTertiary,
+                                )
+                                DeliverableCard(outsideDeliverables) { state.openAbsolutePath(it) }
+                            }
+                        }
+                    }
                     if (streaming) {
                         item(key = "streaming") {
                             StreamingBubble(state.streamingText)

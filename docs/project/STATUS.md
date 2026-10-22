@@ -34,6 +34,40 @@
 - Gitee 上放的是 GitHub 构建的那份 deb（与本机那份字节不同，jpackage 烤了时间戳）——
   刻意如此，否则 Gitee 里的包与随包校验和对不上。
 
+## v1.0.0 修复 · 历史会话里没有文件卡（2026-10-22）
+
+**基于什么**：用户一句「文件卡 在不是历史会话中有，在历史里拉出来就没有」。
+
+**根因（真机取证，不是猜的）**：`GET /chat/sessions/{id}/messages` 不带 `beforeSeq` 时
+只返回**最近 298 条**（`hasMore: true`）。实测该会话已到 seq 1934，首页只给 seq 1637→1934；
+而 `deliverables/presented` 事件在 **seq 580，落在第 5 页**（每页 298 条）。
+会话短的时候它在窗口里 → 有卡；会话一长就滚出窗口 → 再打开就没了。
+（叠加因素：服务端历史有 2 MiB 字节预算，超了也从**最旧**开始丢整条，方向一致。）
+
+顺带发现第二个洞：实时流里这个事件被桥接规范化成 **`chat.deliverables.presented`**，
+客户端 `handleEvent` 根本没这个分支 —— 新交付物只能等刷新后才可能出现。
+
+**干了什么**
+
+1. `data/ChatHistory.kt`：两种事件名都认（`DELIVERABLE_EVENT` / `DELIVERABLE_EVENT_REALTIME`）；
+   新增 `deliverablesIn(events)`，从一页原始事件里抽交付物、不做完整投影。
+2. `AppState`：`loadHistory` 拿到首页后，若 `hasMore` 就起 `scanDeliverables()` **后台往回翻最多 6 页**
+   （不动 `chatItems`、不动 `oldestSeq`，与"加载更早"是两回事）；结果存 `sessionDeliverables`。
+3. `AppState.handleEvent` 补交付物分支：实时到了直接出卡，不等刷新。
+4. `ui/ChatScreen.kt`：消息流末尾加"更早轮次的产出文件"区，
+   只画 `deliverablesOutsideStream()`（消息流里没有的那部分），不与流里的卡重复。
+
+**测了什么**
+
+- `tools/verify-history.sh` 拿**真实第 5 页**（264 条事件）跑：
+  `Deliverable=1`、统计"4 个产出" ✓ —— 证明回溯能捞到。
+- 编译 0 error；`tools/docs-check.sh` **29/29**。
+
+**没做的**：本机装不进去（沙箱 `/usr/share`、`/opt` 都只读，第二个实例也被内存限制掐死），
+**UI 效果要由用户装新 deb 重启后确认**。
+
+---
+
 ## v1.0.0 真机验收 · UOS 本机安装后实测（2026-10-22）
 
 用户装上 `dsh-desktop_1.0.0-1_amd64.deb` 并启动后，用 xdotool + 截图在真实窗口里逐项测

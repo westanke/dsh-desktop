@@ -100,10 +100,14 @@ sealed interface ChatItem {
     ) : ChatItem
 
     /**
-     * 一轮结束时端出来的产出文件（`deliverables/presented`）。
+     * 一轮结束时端出来的产出文件。
      *
      * 以前这里降级成一条「产出文件：…」提示——把结构化信息拍平成字符串，
      * 结果既点不开也没法带描述。现在保留结构，UI 画卡片，点了直接定位到文件页。
+     *
+     * 事件名有**两种**：历史里内核原样透传的是 `deliverables/presented`，
+     * 实时流被桥接规范化成 `chat.deliverables.presented`。只认其中一个，
+     * 另一条路就整条断掉（表现：刚跑完有卡片、下次打开会话就没了）。
      */
     data class Deliverable(
         override val id: String,
@@ -236,6 +240,42 @@ fun chatStats(items: List<ChatItem>): ChatStats {
     return ChatStats(turns, tools, failed, reasoning, deliverables)
 }
 
+/** 历史里内核持久化的交付物事件名（原样透传，磁盘上就是它）。 */
+const val DELIVERABLE_EVENT = "deliverables/presented"
+
+/** 实时流里的名字：桥接的 `normalizeDshEvent` 给它加了 `chat.` 前缀。 */
+const val DELIVERABLE_EVENT_REALTIME = "chat.deliverables.presented"
+
+/** 是不是交付物事件（两种名字都算）。 */
+fun isDeliverableEvent(type: String?): Boolean =
+    type == DELIVERABLE_EVENT || type == DELIVERABLE_EVENT_REALTIME
+
+/** 从事件 data 里读 `files[]`；形状不对返回空表，不猜。 */
+fun deliverableFiles(data: JsonObject?): List<DeliverableFile> =
+    ((data?.get("files") as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { raw ->
+        val value = raw as? JsonObject ?: return@mapNotNull null
+        val path = value.str("path")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        DeliverableFile(path, value.str("description"))
+    }
+
+/**
+ * 从一页**原始事件**里抽出交付物，只挑卡片、不做完整投影。
+ *
+ * 为什么需要它：历史接口默认只给最近约 300 条（`hasMore: true`），交付物事件
+ * 常常落在更早的页里 —— 真机实测 seq 580 的交付物在第 5 页（每页 298 条、
+ * 会话已到 seq 1934）。于是"刚跑完有卡片、重新打开就没了"。
+ * 往回翻只为找卡片时，没必要给每一页都跑一遍完整投影。
+ */
+fun deliverablesIn(events: List<JsonElement>): List<DeliverableFile> {
+    val out = ArrayList<DeliverableFile>()
+    for (element in events) {
+        val event = unwrapEvent(element) ?: continue
+        if (!isDeliverableEvent(event.str("type"))) continue
+        out += deliverableFiles(event.obj("data"))
+    }
+    return out
+}
+
 fun parseHistoryOldestSeq(events: List<JsonElement>): Int? =
     events.mapNotNull { unwrapEvent(it)?.int("seq") }.minOrNull()
 
@@ -331,12 +371,8 @@ fun parseHistory(events: List<JsonElement>): List<ChatItem> {
                 }
             }
 
-            "deliverables/presented" -> {
-                val files = (data["files"] as? JsonArray).orEmpty().mapNotNull { raw ->
-                    val value = raw as? JsonObject ?: return@mapNotNull null
-                    val path = value.str("path")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    DeliverableFile(path, value.str("description"))
-                }
+            DELIVERABLE_EVENT, DELIVERABLE_EVENT_REALTIME -> {
+                val files = deliverableFiles(data)
                 if (files.isNotEmpty()) {
                     items += ChatItem.Deliverable("$seq-deliverable", seq, files)
                 }

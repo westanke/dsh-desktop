@@ -12,6 +12,7 @@ import io.github.westanke.dshdesktop.data.ChatWorkspace
 import io.github.westanke.dshdesktop.data.CommandDescriptor
 import io.github.westanke.dshdesktop.data.ConnectionProfile
 import io.github.westanke.dshdesktop.data.DeviceView
+import io.github.westanke.dshdesktop.data.DeliverableFile
 import io.github.westanke.dshdesktop.data.DirectoryPage
 import io.github.westanke.dshdesktop.data.DshWorkspaceClient
 import io.github.westanke.dshdesktop.data.FileEntry
@@ -38,11 +39,14 @@ import io.github.westanke.dshdesktop.data.WorkspaceEventListener
 import io.github.westanke.dshdesktop.data.EventSubscription
 import io.github.westanke.dshdesktop.data.listChatSessions
 import io.github.westanke.dshdesktop.data.listMessagesPage
+import io.github.westanke.dshdesktop.data.deliverableFiles
+import io.github.westanke.dshdesktop.data.deliverablesIn
 import io.github.westanke.dshdesktop.data.parseHistory
 import io.github.westanke.dshdesktop.data.parseMaxSeq
 import io.github.westanke.dshdesktop.data.parseHistoryOldestSeq
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -126,6 +130,19 @@ class AppState(
     var historyHasMore by mutableStateOf(false)
     var loadingOlder by mutableStateOf(false)
     private var oldestSeq: Int? = null
+
+    /**
+     * 这个会话历次端出来的**产出文件**，与消息流分开存。
+     *
+     * 为什么不能只靠消息流里的卡片：历史接口默认只给最近约 300 条，
+     * 交付物事件常常落在更早的页里（真机：seq 580 的交付物在第 5 页）。
+     * 于是"刚跑完有卡片、重新打开会话就没了"。这里由后台回溯补齐。
+     */
+    var sessionDeliverables by mutableStateOf<List<DeliverableFile>>(emptyList())
+        internal set
+    private var deliverableScan: Job? = null
+    /** 后台为找卡片最多再往回翻几页。够覆盖 300×6 ≈ 1800 条，再长就该靠"加载更早"了。 */
+    private val deliverableScanPages = 6
 
     var sessionModels by mutableStateOf<SessionModels?>(null)
     var modelError by mutableStateOf<String?>(null)
@@ -462,6 +479,8 @@ class AppState(
         chatItems = emptyList()
         historyHasMore = false
         oldestSeq = null
+        deliverableScan?.cancel()
+        sessionDeliverables = emptyList()
         approvals = emptyList()
         pendingApprovals = 0
         sessionCommands = emptyList()
@@ -484,6 +503,8 @@ class AppState(
         jobs = emptyList()
         jobOutput = null
         chatPanel = null
+        deliverableScan?.cancel()
+        sessionDeliverables = emptyList()
         loadHistory(sessionId)
         loadModels(sessionId)
         loadApprovals(sessionId)
@@ -513,7 +534,10 @@ class AppState(
                     chatItems = page.items
                     historyHasMore = page.hasMore
                     oldestSeq = page.oldest
+                    sessionDeliverables = deliverablesIn(page.rawEvents)
                     applyProjections(sessionId, page)
+                    // 首页只是"最近一段"，早期交付物不在这儿；后台往回翻几页把它们捞回来。
+                    if (page.hasMore && page.oldest != null) scanDeliverables(sessionId, page.oldest!!)
                 }
             }.onFailure {
                 if (selectedSessionId == sessionId) chatError = human(it)
@@ -553,6 +577,54 @@ class AppState(
                 }
             }.onFailure { showToast(human(it)) }
             loadingOlder = false
+        }
+    }
+
+    /**
+     * 会话级产出里、**当前消息流没画到的**那些。
+     *
+     * 首页里就有交付物事件时，消息流自己会画卡片，这里再画一遍就是两张一样的卡。
+     * 只有落在更早页（要回溯才捞得到）的部分才需要这块汇总区补上。
+     */
+    fun deliverablesOutsideStream(): List<DeliverableFile> {
+        val inStream = chatItems
+            .filterIsInstance<ChatItem.Deliverable>()
+            .flatMap { it.files }
+            .mapTo(HashSet()) { it.path }
+        return sessionDeliverables.filterNot { it.path in inStream }
+    }
+
+    /**
+     * 往回翻更早的历史，只为了把**产出文件**捞齐。
+     *
+     * 不动 `chatItems`，也不动 `oldestSeq`——它和"加载更早"是两回事：
+     * 那一个是用户主动翻页，这一个是为了让卡片在打开会话时就出现。
+     * 翻页失败静默收场：卡片少几张可以忍，弹一堆错误不行。
+     */
+    private fun scanDeliverables(sessionId: String, fromSeq: Int) {
+        deliverableScan?.cancel()
+        deliverableScan = scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val found = ArrayList(sessionDeliverables)
+                    var before: Int? = fromSeq
+                    var pages = 0
+                    while (before != null && pages < deliverableScanPages) {
+                        val root = client().listMessagesPage(sessionId, beforeSeq = before).jsonObject
+                        val events = (root["events"] as? JsonArray)?.toList().orEmpty()
+                        found += deliverablesIn(events)
+                        pages++
+                        val more = (root["hasMore"] as? JsonPrimitive)?.contentOrNull
+                            ?.toBooleanStrictOrNull() == true
+                        before = if (more) parseHistoryOldestSeq(events) else null
+                    }
+                    found
+                }
+            }.onSuccess { found ->
+                if (selectedSessionId == sessionId) {
+                    sessionDeliverables = found.distinctBy { it.path }
+                }
+            }
         }
     }
 
@@ -760,6 +832,18 @@ class AppState(
             "chat.approval.resolved" -> {
                 val sessionId = data.str("sessionId") ?: return
                 if (sessionId == selectedSessionId) loadApprovals(sessionId)
+            }
+
+            // 交付物。实时流里叫 `chat.deliverables.presented`（桥接规范化时加了前缀），
+            // 历史里叫 `deliverables/presented` —— 两个名字都得认，漏一个就是
+            // "新交付物要等下一次刷新才出现"。
+            "chat.deliverables.presented", "deliverables/presented" -> {
+                val sessionId = data.str("sessionId") ?: selectedSessionId ?: return
+                val files = deliverableFiles(data)
+                if (files.isEmpty()) return
+                if (sessionId == selectedSessionId) {
+                    sessionDeliverables = (files + sessionDeliverables).distinctBy { it.path }
+                }
             }
 
             "file.changed", "file.trashed" -> {

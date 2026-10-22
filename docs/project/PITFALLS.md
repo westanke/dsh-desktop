@@ -654,3 +654,44 @@ Release 天然长在 GitHub 上——主源上自然就是空的。
 **防回归**：同一个 tag 的发行版附件按名字去重即可幂等——Gitee 没有
 "覆盖同名附件"的接口（删除需要 attachment id，而发行版详情不返回 id），
 所以新版本一定要发新 tag。
+
+---
+
+### 历史只给最近一段，早期交付物不翻页就不出现
+
+**现象**：同一个会话，刚跑完那一轮**有文件卡**；关掉再打开（或会话继续跑长之后）
+**卡片就没了**。消息、工具块、思考都在，唯独产出文件消失。
+
+**根因**：`GET /chat/sessions/{id}/messages` 不带 `beforeSeq` 时只返回**最近约 300 条**
+（`hasMore: true`）。真机实测：一个已到 seq 1934 的会话，首页只给 seq 1637→1934 共 298 条；
+而 `deliverables/presented` 事件在 **seq 580，落在第 5 页**（每页 298 条）。
+会话短的时候它还在窗口里 → 有卡；会话一长就滚出窗口 → 没卡。
+（另一层是服务端的 2 MiB 字节预算，超了也从**最旧**开始丢整条，方向一致。）
+
+**修法**：卡片不能只靠消息流里恰好有这一段。
+
+- `data/ChatHistory.kt` 新增 `deliverablesIn(events)`：从一页原始事件里抽交付物、不做完整投影；
+- `AppState.loadHistory` 拿到首页后，若 `hasMore` 就起 `scanDeliverables()` 后台往回翻
+  （最多 6 页，不动 `chatItems`、不动 `oldestSeq`，与"加载更早"是两回事）；
+- 结果存 `sessionDeliverables`，UI 用 `deliverablesOutsideStream()` 只画**消息流里没有的**那部分，
+  避免与流里的卡重复。
+
+**防回归**：`tools/verify-history.sh <那页 json>` 会打出 `Deliverable=1` 与"4 个产出"；
+它变 0 就是回归。判据的本质是——**交付物事件在磁盘上有、在首页里没有**，
+所以任何"只在首页里找卡片"的写法都必然丢。
+
+---
+
+### 交付物事件有两个名字
+
+**现象**：新交付物要等下一次刷新才出现；或者反过来，历史里有卡、实时没有。
+
+**根因**：事件名不统一——历史里内核原样透传的是 `deliverables/presented`，
+实时流被桥接的 `normalizeDshEvent` 规范化成 **`chat.deliverables.presented`**。
+只认其中一个，另一条路就整条断掉。
+
+**修法**：`ChatHistory.kt` 里两个名字都收（`DELIVERABLE_EVENT` / `DELIVERABLE_EVENT_REALTIME`），
+`AppState.handleEvent` 也补上这两个分支——实时到了直接插卡片，不等刷新。
+
+**防回归**：新增事件分支时先确认"历史和实时叫同一个名字吗"，
+桥接的 `src/host/chat-adapter.ts` 里 `normalizeDshEvent` 加了前缀的实时名，客户端要跟上。

@@ -39,3 +39,7 @@ tools/windows-libs/
 .idea/
 *.iml
 .vscode/
+
+# ── 诊断取样（含解出来的设备令牌与真实历史响应，绝不入库）──────────
+.diag*/
+.verify*/
