@@ -47,11 +47,13 @@ jobs:
       - name: 编译并打 deb（完整包）
         run: bash tools/package.sh
 
-      - name: 打轻量 deb + 运行时压缩包
+      # 次序不能反：轻量包要把「运行时 tar.xz 的 sha256」打进 lib/app/，
+      # 打包时 dist 里没有那份 .sha256 就会静默跳过校验（随后校验步骤判红）。
+      - name: 打运行时压缩包 + 轻量 deb
         run: |
           set -euo pipefail
-          LITE=1 bash tools/package.sh
           bash tools/build-runtime.sh
+          LITE=1 bash tools/package.sh
 
       - name: 校验
         run: |
@@ -112,13 +114,14 @@ jobs:
           TARGET_PLATFORM: linux-arm64
         run: bash tools/package.sh
 
-      - name: 打轻量 deb + 运行时压缩包
+      # 同 amd64：先把运行时 tar.xz 和它的 sha256 造出来，再打轻量包。
+      - name: 打运行时压缩包 + 轻量 deb
         env:
           TARGET_PLATFORM: linux-arm64
         run: |
           set -euo pipefail
-          LITE=1 bash tools/package.sh
           bash tools/build-runtime.sh
+          LITE=1 bash tools/package.sh
 
       - name: 校验
         run: |
@@ -171,12 +174,12 @@ jobs:
         shell: bash
         run: bash tools/package.sh
 
-      - name: 打轻量 zip + 运行时压缩包
+      - name: 打运行时压缩包 + 轻量 zip
         shell: bash
         run: |
           set -euo pipefail
-          LITE=1 bash tools/package.sh
           bash tools/build-runtime.sh
+          LITE=1 bash tools/package.sh
 
       - name: 校验
         shell: bash

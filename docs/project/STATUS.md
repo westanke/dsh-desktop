@@ -39,6 +39,12 @@
   6 种工具名折叠成「read、bash、edit、write 等 6 次」；`formatToolDuration` 四档单位。
 - `tools/docs-check.sh` **30/30**（新增「SettingsScreen 兜底版本一致」）。
 - 版本 1.0.0 → **1.0.1**：设置页「关于」的版本号改为读 jar manifest，读不到才用常量兜底。
+- 打包次序修正（CI 第一次 v1.0.1 打红暴露的）：① `LITE=1 package.sh` 里的 jpackage
+  产物原来直接落 `dist/`，会把上一步打好的完整包覆盖成"没有桌面入口"的半成品
+  → 现在 LITE 模式落 `build/lite-jpkg`；② 运行时 tar.xz + sha256 必须**先于**轻包
+  生成，否则轻包 `lib/app/` 里没有校验和（校验步骤判红）；③ 校验里的 deb 名按
+  `version.txt` 钉死，别用 `dist/*.deb`（会同时匹配完整包和轻包）。
+  本机按 CI 同次序（完整包 → 运行时 → 轻包 → 校验）跑通，两个 ✓ 都过。
 - 启动器四条路径实测（`DSH_LAUNCHER_NO_DIALOG=1`）：① 两个源都 404 → 退出码 1 +
   完整提示 + 日志有记录 ② `DSH_RUNTIME_TARBALL` 本地包 → 解压后 dry-run 指到它
   ③ 再跑一次命中已解压目录，不再下载 ④ java 退出码 3 → 报「客户端异常退出」。

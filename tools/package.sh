@@ -228,14 +228,30 @@ PY
     esac
 
     echo "▸ 3/4 jpackage → deb（$DEB_ARCH）"
+    # jpackage 产出的那份 deb 没有 /usr/share/applications 下的桌面入口，只能当"骨架"
+    # 用（下面 dpkg-deb -R 抽出来重打）。轻量模式下如果还写进 dist，就会覆盖前一步
+    # 打好的完整包 —— CI 校验随后按完整包去查桌面入口，直接判红（2026-10-22 踩过）。
+    JP_DEST="$ROOT/dist"
+    _skip_dest=0
+    JP_ARGS=()
+    if [ "${LITE:-0}" = "1" ]; then
+      JP_DEST="$ROOT/build/lite-jpkg"
+      mkdir -p "$JP_DEST"
+    fi
+    for _a in "${JP_COMMON[@]}"; do
+      if [ "$_skip_dest" = "1" ]; then _skip_dest=0; continue; fi
+      if [ "$_a" = "--dest" ]; then _skip_dest=1; continue; fi
+      JP_ARGS+=("$_a")
+    done
+    JP_ARGS+=(--dest "$(wp "$JP_DEST")")
     "$JP" --type deb \
       --linux-deb-maintainer "westanke" \
       --linux-shortcut \
       --linux-menu-group "Development" \
-      "${JP_COMMON[@]}" >/dev/null
+      "${JP_ARGS[@]}" >/dev/null
 
     echo "▸ 4/4 补桌面入口并重打 deb"
-    DEB="$ROOT/dist/dsh-desktop_${VERSION}-1_${DEB_ARCH}.deb"
+    DEB="$JP_DEST/dsh-desktop_${VERSION}-1_${DEB_ARCH}.deb"
     ICONS="$ROOT/build/icons"
 
     # 多尺寸图标：32/48/64/128/256。jpackage 自带的只有 32×32，桌面上会糊成一片。

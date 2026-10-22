@@ -52,7 +52,16 @@ ReadBody / TerminalBody / DiffBody 全文铺在会话里。所以"手机版那�
      `DSH_RUNTIME_TARBALL` 两种手动兜底和发行版地址一起写进弹窗；
    - **不再 `exec java`**：前台跑拿退出码，`1..128` 才报「异常退出」（128+ 是信号，
      注销时不该弹"启动失败"）；无终端时 java 的 stderr 追加进日志。
-7. **`tools/launcher/dsh-desktop.bat` 同构**：日志 `%LOCALAPPDATA%\dsh-desktop\launcher.log`，
+7. **打包/CI 三个次序坑（v1.0.1 首次发版被抓出来的）**：
+   - `LITE=1 bash tools/package.sh` 里 jpackage 的产物原来直接写 `dist/`，
+     会把上一步打好的完整包**覆盖**成没有 `/usr/share/applications` 的半成品 →
+     改落 `build/lite-jpkg`，`DEB` 从那里取骨架；
+   - 运行时 tar.xz 与 `.sha256` 必须**先**造出来再打轻包，否则轻包 `lib/app/`
+     里没有校验和（第 15 轮加了校验、次序没跟着调）；
+   - CI 校验的 `dpkg-deb -I dist/*.deb` 在两包并存时把第二个当 control 组件名 →
+     改成按 `version.txt` 拼文件名；`tar -tJf | grep -qx` 也改成先取 listing，
+     避免 `grep -q` 提前关管道撞 `pipefail`。
+8. **`tools/launcher/dsh-desktop.bat` 同构**：日志 `%LOCALAPPDATA%\dsh-desktop\launcher.log`，
    java 非零退出提示日志路径，双击启动（`cmdcmdline` 含 `/c`）时 `pause` 停住。
 
 ### 测了什么
