@@ -89,6 +89,7 @@ fun main(args: Array<String>) {
             is ChatItem.Reasoning -> item.text
             is ChatItem.Tool -> "${item.name} ${item.arguments.take(50)}"
             is ChatItem.ToolGroup -> "${item.title} [${item.tools.size} 条]"
+            is ChatItem.TurnRun -> "已完成 ${if (item.isRunning) "（在跑）" else ""}[${item.children.size} 条]"
             is ChatItem.Deliverable -> item.files.joinToString("、") { it.name }
             is ChatItem.Notice -> "[${item.level}] ${item.text}"
         }.replace("\n", " ").take(64)

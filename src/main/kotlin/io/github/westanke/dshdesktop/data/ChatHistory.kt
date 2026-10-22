@@ -97,6 +97,39 @@ sealed interface ChatItem {
             else tools.mapNotNull { it.durationMs }.takeIf { it.size == tools.size }?.sum()
     }
 
+    /**
+     * 一轮里**连续的工作段**：工具调用（含合并组）+ 思考，折成一行。
+     *
+     * 官方 Web 在每轮末尾给一行「已完成，用时 20分34秒」，点开才是逐条；
+     * 桌面端照抄这个形态——一行一条工具虽然比全展开强，但一轮十几次调用
+     * 仍会把正文挤成"工具列表里插着几句话"。
+     *
+     * 折叠规则见 [foldTurnRuns]：只合并真的挨着的，中间隔了正文/提示/交付物就断开。
+     */
+    data class TurnRun(
+        override val id: String,
+        override val seq: Int,
+        val children: List<ChatItem>,
+    ) : ChatItem {
+        val tools: List<Tool>
+            get() = children.flatMap { child ->
+                when (child) {
+                    is Tool -> listOf(child)
+                    is ToolGroup -> child.tools
+                    else -> emptyList()
+                }
+            }
+
+        val hasError: Boolean get() = tools.any { it.isError }
+
+        val isRunning: Boolean get() = tools.any { it.result == null }
+
+        /** 整段墙钟耗时；有工具缺耗时（时钟倒退/未返回）就给 null，宁缺勿假。 */
+        val totalDurationMs: Long?
+            get() = if (tools.isEmpty()) null
+            else tools.mapNotNull { it.durationMs }.takeIf { it.size == tools.size }?.sum()
+    }
+
     data class Notice(
         override val id: String,
         override val seq: Int,
@@ -259,6 +292,12 @@ fun chatStats(items: List<ChatItem>): ChatStats {
             is ChatItem.ToolGroup -> {
                 tools += item.tools.size
                 failed += item.tools.count { it.isError }
+            }
+            // 折叠轮同理：children 里才是真正的工具与思考
+            is ChatItem.TurnRun -> {
+                tools += item.tools.size
+                failed += item.tools.count { it.isError }
+                reasoning += item.children.count { it is ChatItem.Reasoning }
             }
             else -> Unit
         }
@@ -450,7 +489,43 @@ fun parseHistory(events: List<JsonElement>): List<ChatItem> {
             }
         }
     }
-    return mergeToolRuns(items)
+    return foldTurnRuns(mergeToolRuns(items))
+}
+
+/**
+ * 把**连续的工作段**（工具调用 / 合并组 / 思考）折成 [ChatItem.TurnRun]，形态照官方
+ * Web 的「已完成，用时 20分34秒 ⌄」一行。
+ *
+ * 只合并真的挨着的：中间隔了用户/助手正文、提示、产出卡就断开——那些是轮次的分界，
+ * 跨过去合并会把不同阶段的工作搅成一段。单个工具/单段思考不折（它自己已经是一行）。
+ *
+ * 在 [parseHistory] 末尾跑一次；实时路径走的是同一份投影，不需要第二份实现。
+ */
+fun foldTurnRuns(items: List<ChatItem>): List<ChatItem> {
+    val work = { item: ChatItem ->
+        item is ChatItem.Tool || item is ChatItem.ToolGroup || item is ChatItem.Reasoning
+    }
+    if (items.none(work)) return items
+    val out = mutableListOf<ChatItem>()
+    val run = mutableListOf<ChatItem>()
+    fun flush() {
+        when {
+            run.isEmpty() -> Unit
+            // 只剩一条且它自己就带折叠壳（工具/组/思考），没必要再包一层
+            run.size == 1 -> out += run[0]
+            else -> out += ChatItem.TurnRun(
+                id = "run-${run.first().seq}-${run.last().seq}",
+                seq = run.first().seq,
+                children = run.toList(),
+            )
+        }
+        run.clear()
+    }
+    for (item in items) {
+        if (work(item)) run += item else { flush(); out += item }
+    }
+    flush()
+    return out
 }
 
 /**

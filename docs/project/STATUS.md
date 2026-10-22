@@ -6,6 +6,40 @@
 
 ---
 
+## v1.0.1 后续 · 对齐官方 Web 的消息流（2026-10-22，未打 tag）
+
+**基于什么**：用户贴了官方 Web 与桌面端同会话的两张截图说「对比修改」。
+
+**差距与改动**
+
+1. **按轮折叠（最大差异）**：官方一轮工作只给一行「已完成，用时 20分34秒 ⌄」，
+   桌面端却是一串工具行。新增 `ChatItem.TurnRun` + `foldTurnRuns()`：连续的
+   工具/合并组/思考折成一条，展开才是逐条；`ToolGroupBlock` / `TurnRunBlock`
+   挪进 `ToolBlocks.kt`（ChatScreen 回到 800 行预算内）。
+2. **用户气泡补时间 + 复制**：官方在气泡右下给 `13:57 ⧉`；桌面端补齐
+   （`messageTime()`，历史没带时间的不显示）。
+3. **统计行居中**：官方把统计压在输入框正下方居中；桌面端原来靠右，改为居中
+   （左右等重Spacer，左侧「正在执行」提示保留）。
+4. **消息区滚动条（用户追加）**：内容一长上划不明显——贴消息视口右缘加
+   `VerticalScrollbar`（`rememberScrollbarAdapter(listState)`，foundation 1.7.3
+   desktop API），`derivedStateOf { canScrollForward || canScrollBackward }`
+   控制只在内容溢出时显示；样式 6dp 细拇指 + 40dp 最小高 + 悬停加深
+   （`ScrollbarStyle` 1.7.3 参数序：minimalHeight/thickness/shape/
+   hoverDurationMillis/unhoverColor/hoverColor）。ChatScreen 730 → 756。
+
+**测了什么**
+
+- `build.sh` 通过；`docs-check.sh` 30/30。
+- Java 探针 `ProbeTurnRun` 12/12：连续段折叠、单条不包壳、跨用户断开、
+  在跑/缺耗时、统计穿透。
+- `verify-history.sh`（真实 298 条事件）：TurnRun 6/38/31 条 children，
+  统计 50 次工具（1 失败） · 43 段思考穿透正确。
+
+**没做的**：官方右侧悬浮工具条（对话/轨迹/上下文切换）没抄——桌面端已有
+标题下悬挂区 + 页头入口，等用户真机看完再定；tok/s 官方统计有而桥接没给数据。
+
+---
+
 ## v1.0.1 · 工具调用默认折叠成一行（2026-10-22）
 
 **基于什么**：用户一句「工具调用如手机版 默认收缩起来」，配一张手机版截图

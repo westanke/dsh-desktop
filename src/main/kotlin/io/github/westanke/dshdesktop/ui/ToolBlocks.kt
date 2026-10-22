@@ -3,6 +3,7 @@ package io.github.westanke.dshdesktop.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -362,3 +364,144 @@ private fun GenericBody(view: ToolBlockView.Generic, tool: ChatItem.Tool) {
         )
     }
 }
+
+/**
+ * 一组相邻的工具调用。
+ *
+ * 折叠态只给一行摘要（工具名 + 次数 + 耗时，形态照手机版"耗时 8 秒 · 2 次工具调用"），
+ * 展开后每条仍是各自的专用块（read 给路径头、bash 给 `$ 命令`、edit 给 `-`/`+` 对照）。
+ */
+@Composable
+internal fun ToolGroupBlock(group: ChatItem.ToolGroup) {
+    var expanded by remember { mutableStateOf(false) }
+    val colors = LocalAppColors.current
+    // 组内墙钟耗时：逐条 durationMs 求和（串行执行时≈整组耗时）；还有在跑的就标"运行中"
+    val durationLabel = when {
+        group.tools.isEmpty() -> null
+        group.isRunning -> "运行中"
+        else -> group.totalDurationMs?.let { "耗时 " + formatToolDuration(it) }
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm)),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = colors.textTertiary,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                group.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (group.hasError) colors.danger else colors.textSecondary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (durationLabel != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    durationLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                )
+            }
+            if (group.hasError) {
+                Spacer(Modifier.width(8.dp))
+                Text("含失败", style = MaterialTheme.typography.labelSmall, color = colors.danger)
+            }
+        }
+        if (expanded) {
+            Column(
+                Modifier
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 14.dp, end = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                group.tools.forEach { tool -> ToolCallBlock(tool) }
+            }
+        }
+    }
+}
+
+/**
+ * 一轮的连续工作段（工具 + 思考），折叠形态照官方 Web：「已完成，用时 20分34秒 ⌄」。
+ *
+ * 与 [ToolGroupBlock] 的区别：官方不给"工具名 + 次数"，就一行状态——做了什么点开看，
+ * 做了多久一眼知道。展开后 children 仍按各自的样子渲染（工具专用块 / 思考折叠）。
+ */
+@Composable
+internal fun TurnRunBlock(run: ChatItem.TurnRun) {
+    val colors = LocalAppColors.current
+    var expanded by remember(run.id) { mutableStateOf(false) }
+    val duration = run.totalDurationMs
+    val label = when {
+        run.isRunning -> "运行中…"
+        duration != null -> "已完成，用时 " + formatToolDuration(duration)
+        else -> "已完成"
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 2.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (expanded) "收起这轮的工作" else "展开这轮的工作",
+                tint = colors.textTertiary,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (run.hasError) colors.danger else colors.textTertiary,
+            )
+            if (run.hasError) {
+                Spacer(Modifier.width(8.dp))
+                Text("含失败", style = MaterialTheme.typography.labelSmall, color = colors.danger)
+            }
+        }
+        if (expanded) {
+            Column(
+                Modifier.padding(start = 21.dp, top = 2.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                run.children.forEach { child ->
+                    when (child) {
+                        is ChatItem.Tool -> ToolCallBlock(child)
+                        is ChatItem.ToolGroup -> ToolGroupBlock(child)
+                        is ChatItem.Reasoning -> CollapsibleBlock(
+                            title = "思考",
+                            body = child.text,
+                            tone = colors.textSecondary,
+                        )
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 用户气泡下的时间戳（HH:mm）；历史里没带时间的（0）就不显示。 */
+internal fun messageTime(time: Long): String =
+    if (time <= 0) ""
+    else java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+        .format(java.time.Instant.ofEpochMilli(time).atZone(java.time.ZoneId.systemDefault()))
+

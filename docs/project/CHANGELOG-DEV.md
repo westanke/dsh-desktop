@@ -5,6 +5,43 @@
 
 ---
 
+## v1.0.1 后续 · 对齐官方 Web 的消息流（2026-10-22，未打 tag）
+
+### 基于什么
+
+用户贴两张截图（官方 Web vs 桌面端同一会话）说「对比修改」。
+
+### 干了什么
+
+1. **`data/ChatHistory.kt`**：新增 `ChatItem.TurnRun`（children + tools 聚合 +
+   `totalDurationMs`/`isRunning`/`hasError`）与 `foldTurnRuns()`——连续的
+   Tool/ToolGroup/Reasoning 折成一条，正文/提示/交付物断开；单条不包壳。
+   `parseHistory()` 末尾统一跑，实时路径共用同一投影。`chatStats` 穿透 TurnRun 数。
+2. **`ui/ToolBlocks.kt`**（364 → 507）：收编 `ToolGroupBlock()`（原 ChatScreen 私有，
+   改 internal）、新增 `TurnRunBlock()`（折叠行 = 箭头 + 「已完成，用时 X」/「运行中…」
+   + 「含失败」，展开渲染 children）与 `messageTime()`（HH:mm，0 不显示）。
+3. **`ui/ChatScreen.kt`**（773 → 730，回到预算内）：`MessageRow` 加 TurnRun 分支；
+   用户气泡从 `Row` 改 `Column(End)`，气泡下补时间 + 复制图标
+   （`Icons.Filled.ContentCopy` + `copyToClipboard`）。
+4. **`ui/Composer.kt`**：统计行居中（左右等重 Spacer）。
+5. **`ui/ChatScreen.kt` 追加**（用户提「加一个侧边滚动条，内容过多的时候上划不明显，
+   最好是内容长的时候能看见」）：消息区右缘挂 `VerticalScrollbar` +
+   `rememberScrollbarAdapter(listState)`；`derivedStateOf` 判
+   `canScrollForward || canScrollBackward`，没溢出不画；自定义
+   `ScrollbarStyle`（6dp 细拇指、40dp 最小高、悬停加深、透明轨道）。文件 730 → 756。
+6. **`tools/VerifyHistory.kt`**：preview 的 `when` 补 TurnRun 分支（穷举编译器会逼着改）。
+
+### 测了什么
+
+- `build.sh` / `docs-check.sh` 30/30 / `verify-history.sh`（真实 298 事件）全绿。
+- 探针 `ProbeTurnRun` 12/12（见 STATUS）。
+
+### 没做的
+
+- 官方右侧悬浮工具条未抄；tok/s / 缓存命中统计无数据源。
+
+---
+
 ## v1.0.1 · 工具调用默认折叠（2026-10-22）
 
 ### 基于什么

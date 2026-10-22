@@ -17,14 +17,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.ScrollbarStyle
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Refresh
@@ -40,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +85,12 @@ fun ChatScreen(state: AppState) {
     val session = state.selectedSession
     val listState = rememberLazyListState()
     val colors = LocalAppColors.current
+    // 消息区右侧的细滚动条：适配器跟着 LazyListState 走，只有内容真的溢出
+    // （能往上或往下滚）才画出来——官方 Web 的滚动条也是这个行为。
+    val scrollbarAdapter = rememberScrollbarAdapter(listState)
+    val showScrollbar by remember {
+        derivedStateOf { listState.canScrollForward || listState.canScrollBackward }
+    }
 
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -188,6 +199,22 @@ fun ChatScreen(state: AppState) {
                         hint = "历史里只有内部事件（步骤、任务、token 记录），这些不渲染成消息。发一条就会出现在这里。",
                     )
                 }
+            }
+
+            if (showScrollbar) {
+                // 贴消息视口右缘，不挤内容列；拇指很细，悬停加深，样式对齐官方 Web。
+                VerticalScrollbar(
+                    adapter = scrollbarAdapter,
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 2.dp),
+                    style = ScrollbarStyle(
+                        minimalHeight = 40.dp,
+                        thickness = 6.dp,
+                        shape = RoundedCornerShape(3.dp),
+                        hoverDurationMillis = 300,
+                        unhoverColor = colors.textTertiary.copy(alpha = 0.30f),
+                        hoverColor = colors.textTertiary.copy(alpha = 0.60f),
+                    ),
+                )
             }
         }
 
@@ -631,82 +658,11 @@ internal fun CollapsibleBlock(
     }
 }
 
-/**
- * 一组相邻的工具调用。
- *
- * 折叠态只给一行摘要（工具名 + 次数 + 耗时，形态照手机版"耗时 8 秒 · 2 次工具调用"），
- * 展开后每条仍是各自的专用块（read 给路径头、bash 给 `$ 命令`、edit 给 `-`/`+` 对照）。
- */
-@Composable
-private fun ToolGroupBlock(group: ChatItem.ToolGroup) {
-    var expanded by remember { mutableStateOf(false) }
-    val colors = LocalAppColors.current
-    // 组内墙钟耗时：逐条 durationMs 求和（串行执行时≈整组耗时）；还有在跑的就标"运行中"
-    val durationLabel = when {
-        group.tools.isEmpty() -> null
-        group.isRunning -> "运行中"
-        else -> group.totalDurationMs?.let { "耗时 " + formatToolDuration(it) }
-    }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm)),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (expanded) "收起" else "展开",
-                tint = colors.textTertiary,
-                modifier = Modifier.size(15.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                group.title,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (group.hasError) colors.danger else colors.textSecondary,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (durationLabel != null) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    durationLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.textTertiary,
-                    maxLines = 1,
-                )
-            }
-            if (group.hasError) {
-                Spacer(Modifier.width(8.dp))
-                Text("含失败", style = MaterialTheme.typography.labelSmall, color = colors.danger)
-            }
-        }
-        if (expanded) {
-            Column(
-                Modifier
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 14.dp, end = 8.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                group.tools.forEach { tool -> ToolCallBlock(tool) }
-            }
-        }
-    }
-}
-
 @Composable
 private fun MessageRow(state: AppState, item: ChatItem) {
     val colors = LocalAppColors.current
     when (item) {
-        is ChatItem.User -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        is ChatItem.User -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
             Surface(
                 color = colors.userBubble,
                 shape = RoundedCornerShape(Tokens.radiusLg),
@@ -719,6 +675,30 @@ private fun MessageRow(state: AppState, item: ChatItem) {
                         if (item.text.isNotBlank()) Spacer(Modifier.size(8.dp))
                     }
                     if (item.text.isNotBlank()) MarkdownText(item.text)
+                }
+            }
+            // 官方 Web 在气泡右下方给时间 + 复制：这话说于何时，一键可引
+            if (item.time > 0 || item.text.isNotBlank()) {
+                Spacer(Modifier.size(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (item.time > 0) {
+                        Text(
+                            messageTime(item.time),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textTertiary,
+                        )
+                    }
+                    if (item.text.isNotBlank()) {
+                        Spacer(Modifier.size(6.dp))
+                        Icon(
+                            Icons.Filled.ContentCopy,
+                            contentDescription = "复制这条消息",
+                            tint = colors.textTertiary,
+                            modifier = Modifier
+                                .size(13.dp)
+                                .clickable { copyToClipboard(item.text) },
+                        )
+                    }
                 }
             }
         }
@@ -737,6 +717,9 @@ private fun MessageRow(state: AppState, item: ChatItem) {
 
         // 相邻工具调用合并后的一组：默认折叠，展开才是逐条。
         is ChatItem.ToolGroup -> ToolGroupBlock(item)
+
+        // 一轮的连续工作段（官方 Web 的「已完成，用时 20分34秒 ⌄」）：默认只给一行
+        is ChatItem.TurnRun -> TurnRunBlock(item)
 
         is ChatItem.Deliverable -> DeliverableCard(item.files) { state.openFileByPath(it) }
 

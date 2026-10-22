@@ -262,8 +262,10 @@ fun Composer(state: AppState) {
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.textTertiary,
                 )
+                // 统计居中（照官方 Web）：两侧等重，左边提示短时不偏
                 Spacer(Modifier.weight(1f))
                 ChatStatsBar(state.stats)
+                Spacer(Modifier.weight(1f))
             }
         }
     }
