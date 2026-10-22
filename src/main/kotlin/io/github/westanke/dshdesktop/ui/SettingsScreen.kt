@@ -189,6 +189,36 @@ fun SettingsScreen(state: AppState) {
                 }
             }
 
+            // ── 会话 ─────────────────────────────────────────────
+            AppCard(Modifier.fillMaxWidth()) {
+                SectionLabel("会话")
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "显示上下文注入",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "记忆、系统提示这类注入内容默认不进消息流（官方 Web 也默认收起来）；开了会在对话里多一个「上下文注入」折叠块。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textTertiary,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    androidx.compose.material3.Switch(
+                        checked = state.prefs.showContextInjection,
+                        onCheckedChange = { on ->
+                            state.savePrefs { it.copy(showContextInjection = on) }
+                        },
+                    )
+                }
+            }
+
             // ── 关于 ─────────────────────────────────────────────
             AppCard(Modifier.fillMaxWidth()) {
                 SectionLabel("关于")

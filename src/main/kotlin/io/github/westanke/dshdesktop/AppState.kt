@@ -206,6 +206,18 @@ class AppState(
     /** 待发送附件（还没换成 wire 凭证，见 `PendingAttachment`）。 */
     var attachments by mutableStateOf<List<PendingAttachment>>(emptyList())
 
+    /**
+     * 消息「引用到输入框」的桥：MessageRow 把引用文本塞进来，Composer 消费后置回 null。
+     * draft 是 Composer 的局部状态，外面够不着，只能走这个单向通道。
+     */
+    var composerInsert by mutableStateOf<String?>(null)
+
+    /** 把一段文本（引用块格式）追加进输入框。 */
+    fun quoteIntoComposer(text: String) {
+        if (text.isBlank()) return
+        composerInsert = text
+    }
+
     /** 这个会话的后台任务（`jobs`）。只有真在看的时候才轮询，平时留空。 */
     var jobs by mutableStateOf<List<JobView>>(emptyList())
     var jobsBusy by mutableStateOf(false)

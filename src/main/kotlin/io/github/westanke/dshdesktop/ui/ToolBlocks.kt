@@ -505,3 +505,25 @@ internal fun messageTime(time: Long): String =
     else java.time.format.DateTimeFormatter.ofPattern("HH:mm")
         .format(java.time.Instant.ofEpochMilli(time).atZone(java.time.ZoneId.systemDefault()))
 
+/** 整条消息转引用块（`> ` 前缀），追加进输入框时和原文格式分得清。 */
+internal fun quoteText(raw: String): String =
+    raw.trim().lines().joinToString("\n") { if (it.isBlank()) ">" else "> $it" }
+
+/** 气泡下方的小动作图标：引用到输入框、复制。13dp，够点又不抢正文。 */
+@Composable
+internal fun BubbleAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    val colors = LocalAppColors.current
+    Icon(
+        icon,
+        contentDescription = contentDescription,
+        tint = colors.textTertiary,
+        modifier = Modifier
+            .size(13.dp)
+            .clickable(onClick = onClick),
+    )
+}
+

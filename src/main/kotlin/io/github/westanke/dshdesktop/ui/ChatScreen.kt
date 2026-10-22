@@ -25,10 +25,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Refresh
@@ -118,9 +120,13 @@ fun ChatScreen(state: AppState) {
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val streaming = state.streamingText.isNotEmpty() || state.streamingReasoning.isNotEmpty()
-            val total = state.chatItems.size + if (streaming) 1 else 0
+            // 上下文注入（记忆/系统提示）默认不进消息流，设置里开了才显示；
+            // 在列表源头过滤，而不是渲染时藏——否则空位会多出一段间距。
+            val visibleItems = if (state.prefs.showContextInjection) state.chatItems
+            else state.chatItems.filterNot { it is ChatItem.Notice && it.kind == "context" }
+            val total = visibleItems.size + if (streaming) 1 else 0
             // 列表前面可能还有"加载更早"一格，滚到底要带上前导偏移
-            val leading = if (state.historyHasMore && state.chatItems.isNotEmpty()) 1 else 0
+            val leading = if (state.historyHasMore && visibleItems.isNotEmpty()) 1 else 0
 
             LaunchedEffect(total, state.streamingText.length, state.streamingReasoning.length) {
                 if (total > 0) listState.animateScrollToItem(leading + total - 1)
@@ -133,7 +139,7 @@ fun ChatScreen(state: AppState) {
                     contentPadding = PaddingValues(start = 28.dp, end = 28.dp, top = 18.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    if (state.historyHasMore && state.chatItems.isNotEmpty()) {
+                    if (state.historyHasMore && visibleItems.isNotEmpty()) {
                         item(key = "load-older") {
                             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 if (state.loadingOlder) {
@@ -150,7 +156,7 @@ fun ChatScreen(state: AppState) {
                             }
                         }
                     }
-                    itemsIndexed(state.chatItems, key = { _, item -> item.id }) { _, item ->
+                    itemsIndexed(visibleItems, key = { _, item -> item.id }) { _, item ->
                         MessageRow(state, item)
                     }
                     // 更早轮次的产出文件由 AppState.mergeScannedDeliverables() 按 seq
@@ -588,7 +594,7 @@ private fun StreamingBubble(text: String) {
     val colors = LocalAppColors.current
     Column(Modifier.fillMaxWidth()) {
         if (text.isNotEmpty()) {
-            MarkdownText(text)
+            SelectionContainer { MarkdownText(text) }
         }
         Spacer(Modifier.size(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -643,24 +649,26 @@ internal fun CollapsibleBlock(
         }
         if (expanded) {
             Box(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                Text(
-                    body.ifBlank { "（无内容）" },
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
-                    ),
-                    color = colors.textSecondary,
-                    modifier = Modifier.padding(start = 30.dp, end = 12.dp, bottom = 12.dp),
-                )
+                // 思考/工具输出常要整段搬走：包一层让它可选可复制
+                SelectionContainer {
+                    Text(
+                        body.ifBlank { "（无内容）" },
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                        ),
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(start = 30.dp, end = 12.dp, bottom = 12.dp),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MessageRow(state: AppState, item: ChatItem) {
-    val colors = LocalAppColors.current
+private fun MessageRow(state: AppState, item: ChatItem) {    val colors = LocalAppColors.current
     when (item) {
         is ChatItem.User -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
             Surface(
@@ -674,7 +682,10 @@ private fun MessageRow(state: AppState, item: ChatItem) {
                         ImageStrip(state, state.selectedSessionId, item.attachments)
                         if (item.text.isNotBlank()) Spacer(Modifier.size(8.dp))
                     }
-                    if (item.text.isNotBlank()) MarkdownText(item.text)
+                    if (item.text.isNotBlank()) {
+                        // 自由选择 + Ctrl+C：MarkdownText 是一串 Text，包一层才可选可复制
+                        SelectionContainer { MarkdownText(item.text) }
+                    }
                 }
             }
             // 官方 Web 在气泡右下方给时间 + 复制：这话说于何时，一键可引
@@ -690,21 +701,32 @@ private fun MessageRow(state: AppState, item: ChatItem) {
                     }
                     if (item.text.isNotBlank()) {
                         Spacer(Modifier.size(6.dp))
-                        Icon(
-                            Icons.Filled.ContentCopy,
-                            contentDescription = "复制这条消息",
-                            tint = colors.textTertiary,
-                            modifier = Modifier
-                                .size(13.dp)
-                                .clickable { copyToClipboard(item.text) },
-                        )
+                        BubbleAction(Icons.Filled.FormatQuote, "添加到发言") {
+                            state.quoteIntoComposer(quoteText(item.text))
+                        }
+                        Spacer(Modifier.size(6.dp))
+                        BubbleAction(Icons.Filled.ContentCopy, "复制这条消息") {
+                            copyToClipboard(item.text)
+                        }
                     }
                 }
             }
         }
 
         is ChatItem.Assistant -> Column(Modifier.fillMaxWidth()) {
-            MarkdownText(item.text)
+            SelectionContainer { MarkdownText(item.text) }
+            if (item.text.isNotBlank()) {
+                Spacer(Modifier.size(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BubbleAction(Icons.Filled.FormatQuote, "添加到发言") {
+                        state.quoteIntoComposer(quoteText(item.text))
+                    }
+                    Spacer(Modifier.size(6.dp))
+                    BubbleAction(Icons.Filled.ContentCopy, "复制全文") {
+                        copyToClipboard(item.text)
+                    }
+                }
+            }
         }
 
         is ChatItem.Reasoning -> CollapsibleBlock(
@@ -724,14 +746,17 @@ private fun MessageRow(state: AppState, item: ChatItem) {
         is ChatItem.Deliverable -> DeliverableCard(item.files) { state.openFileByPath(it) }
 
         // 上下文注入（记忆、系统提示）不是对话内容：官方 Web 把它们放进「上下文」页签，
-        // 这里折叠成一行，想看再点开。失败原因、取消这类提示照旧直显——那是要人看见的。
+        // 默认整条不显示（设置里开）；开了就折叠成一行，想看再点开。
+        // 失败原因、取消这类提示照旧直显——那是要人看见的。
         is ChatItem.Notice -> if (item.kind == "context") {
-            CollapsibleBlock(
-                title = "上下文注入",
-                body = item.text.substringAfter('\n').trim(),
-                tone = colors.textTertiary,
-                initiallyExpanded = false,
-            )
+            if (state.prefs.showContextInjection) {
+                CollapsibleBlock(
+                    title = "上下文注入",
+                    body = item.text.substringAfter('\n').trim(),
+                    tone = colors.textTertiary,
+                    initiallyExpanded = false,
+                )
+            }
         } else {
             Row(
                 Modifier

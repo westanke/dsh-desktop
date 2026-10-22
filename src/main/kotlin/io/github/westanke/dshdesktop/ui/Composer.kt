@@ -111,6 +111,14 @@ fun Composer(state: AppState) {
         draft = ""
     }
 
+    // 消息气泡点「引用」：文本追加进输入框（换行衔接，别粘成一坨）
+    LaunchedEffect(state.composerInsert) {
+        state.composerInsert?.let { insert ->
+            draft = if (draft.isBlank()) insert else draft.trimEnd() + "\n" + insert
+            state.composerInsert = null
+        }
+    }
+
     Column(
         Modifier
             .fillMaxWidth()

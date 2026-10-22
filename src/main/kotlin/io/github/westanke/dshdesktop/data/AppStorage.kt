@@ -42,6 +42,11 @@ data class UiPrefs(
     val language: String = "zh",
     val lastSessionId: String? = null,
     val lastNav: String = "chat",
+    /**
+     * 消息流里显示「上下文注入」（记忆/系统提示）的折叠块。
+     * 官方 Web 把它们收进「上下文」页签，对话里默认看不见——这里默认关，想看在设置里开。
+     */
+    val showContextInjection: Boolean = false,
 )
 
 fun defaultDeviceName(): String {

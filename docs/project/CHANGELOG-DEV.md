@@ -5,6 +5,33 @@
 
 ---
 
+## v1.0.1 后续 2 · 自由复制 + 引用到发言 + 上下文注入开关（2026-10-22，未打 tag）
+
+### 干了什么
+
+1. **`ui/ChatScreen.kt`**（756 → 781）：`MessageRow` 用户/助手分支包
+   `SelectionContainer`；气泡下加「引用」「复制」小图标（`BubbleAction()` 在
+   ToolBlocks，13dp）；`visibleItems` 按 `prefs.showContextInjection` 过滤
+   `Notice(kind="context")`；`StreamingBubble`/`CollapsibleBlock` 正文同样可选。
+2. **`ui/ToolBlocks.kt`**（507 → 529）：新增 `quoteText()`（转 `> ` 引用块）与
+   `BubbleAction()`。
+3. **`ui/Composer.kt`**（659 → 667）：`LaunchedEffect(state.composerInsert)`
+   消费引用，追加进 draft。
+4. **`AppState.kt`**（907 → 919）：`composerInsert` + `quoteIntoComposer()`。
+5. **`data/AppStorage.kt`**（192 → 197）：`UiPrefs.showContextInjection = false`。
+6. **`ui/SettingsScreen.kt`**（321 → 366）：「会话」卡片 + Switch。
+
+### 测了什么
+
+- `build.sh` 通过；`docs-check.sh` 全绿。
+
+### 没做的
+
+- 「选中一段文字直接入输入框」没做：Compose 的选区状态要逐层上报，
+  收益配不上复杂度；先用整条引用顶着，真有需求再上右键菜单。
+
+---
+
 ## v1.0.1 后续 · 对齐官方 Web 的消息流（2026-10-22，未打 tag）
 
 ### 基于什么
