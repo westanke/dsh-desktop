@@ -567,3 +567,27 @@ dpkg-deb -c dist/*.deb | grep -q 'skiko-awt-runtime-linux-arm64'
 
 **防回归**：镜像工作流里**不许**用 `${{ github.token }}` 做 push；判据看**退出码**，
 不要 grep 输出文本（`git push` 的提示随版本变）。
+
+---
+
+### Windows 上 Python 打印中文会 UnicodeEncodeError
+
+**现象**：Windows runner 上编译已经过了（`▸ 编译完成` 都打了出来），紧接着
+`UnicodeEncodeError: 'charmap' codec can't encode characters in position 7-10`。
+同样的脚本在 Linux 上好好的。
+
+**根因**：Python 在非 UTF-8 控制台下把 stdout 编码成 `cp1252`（中文机器上可能是 GBK），
+任何非 ASCII 输出——中文提示、`▸`、`✓`——都会抛异常。这不是 jar 打包本身的问题，
+是"打完 jar 后那句提示"把进程带崩的。
+
+**修法**：调用 Python 前开 UTF-8 模式，两个环境变量一起给：
+
+```bash
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+```
+
+跨平台的构建脚本里，Python 输出、写文件（`open(..., encoding="utf-8")`）都要显式处理，
+不能指望控制台是 UTF-8。
+
+**防回归**：脚本里出现中文提示时，先确认这两行已经 export；CI 的 Windows job 每次都会验证。

@@ -98,8 +98,10 @@
 | `tools/mock-server.py` | 离线服务端（端口 **3091**，别抢 3090） | 本地 mock 数据 |
 | `tools/portable/run.sh` | 便携包启动脚本 | 打进 tar.gz 根目录 |
 | `tools/fetch-deps.py` | 按坐标补 Maven 传递依赖 | `lib/` |
-| `tools/windows-libs/` | Windows 用 skiko 原生库 | Windows 打包时用 |
-| `build-windows.bat` | Windows 侧 Gradle `packageMsi` | `build\compose\binaries\main\msi\*.msi` |
+| `build-windows.bat` | Windows 入口：`bash tools/fetch-platform.sh windows-x64` + `bash tools/package.sh` | `dist/dsh-desktop-<ver>-windows-x64.zip`（有 WiX 时另出 msi） |
+
+> 开发机上还有两个不入库的下载种子目录：Windows 原生库的历史落点、以及按平台拉取的
+> 平台库目录。文档里引用路径时用 `git ls-files` 判存在——按"本地在不在"判会外绿内红。
 
 ---
 

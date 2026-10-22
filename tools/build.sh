@@ -97,6 +97,10 @@ if [ -z "$PY" ]; then
   echo "✗ 找不到 Python（打 jar 需要它）" >&2
   exit 1
 fi
+# Windows 上 Python 默认按控制台代码页（cp1252/GBK）输出，打印中文与 ▸ 会
+# UnicodeEncodeError 直接崩掉；UTF-8 模式一次解决，Linux 上无副作用。
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
 
 RUNTIME_CP=""
 for f in "$ROOT"/lib/*.jar; do

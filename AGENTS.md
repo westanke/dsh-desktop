@@ -268,6 +268,7 @@ JUnit + Gradle 那套无处安放。这是 `TECH-DEBT.md` 的 **DEBT-001**，不
 - `Windows 上类路径分隔符是分号且路径要 cygpath`
 - `lib 里的 skiko 运行时必须按平台剔除`
 - `GITHUB_TOKEN 改不了 workflow 文件`
+- `Windows 上 Python 打印中文会 UnicodeEncodeError`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 > `tools/docs-check.sh` 会检查两边是否一一对应。

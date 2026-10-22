@@ -48,8 +48,11 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh dist/
+          # 注意：不要 `dpkg-deb -c … | grep -q`，grep 命中即关闭管道，
+          # 上游 tar 收到 EPIPE 会报 "tar: stdout: write error" 并让整条流水线判红。
           dpkg-deb -I dist/*.deb
-          dpkg-deb -c dist/*.deb | grep -q usr/share/applications/dsh-desktop.desktop
+          contents="$(dpkg-deb -c dist/*.deb)"
+          grep -q 'usr/share/applications/dsh-desktop.desktop' <<< "$contents"
           echo "✓ 包内桌面入口就位"
 
       - uses: actions/upload-artifact@v4
@@ -89,9 +92,12 @@ jobs:
         run: |
           set -euo pipefail
           ls -lh dist/
-          dpkg-deb -I dist/*.deb | grep -q 'Architecture: arm64'
-          dpkg-deb -c dist/*.deb | grep -q 'skiko-awt-runtime-linux-arm64'
-          dpkg-deb -c dist/*.deb | grep -q usr/share/applications/dsh-desktop.desktop
+          # 同上：先整体取回再判断，避免 grep -q 提前关管道把 dpkg-deb 打成失败
+          info="$(dpkg-deb -I dist/*.deb)"
+          contents="$(dpkg-deb -c dist/*.deb)"
+          grep -q 'Architecture: arm64' <<< "$info"
+          grep -q 'skiko-awt-runtime-linux-arm64' <<< "$contents"
+          grep -q 'usr/share/applications/dsh-desktop.desktop' <<< "$contents"
           echo "✓ 架构与桌面入口都对"
 
       - uses: actions/upload-artifact@v4
@@ -126,11 +132,19 @@ jobs:
 
       - name: 校验
         shell: bash
+        # 不用 unzip：Git Bash 的镜像里不一定带它，Python 一定有
         run: |
           set -euo pipefail
           ls -lh dist/
-          unzip -l dist/dsh-desktop-*-windows-x64.zip | grep -q 'dsh-desktop.exe'
-          echo "✓ zip 里有主程序"
+          python - <<'PY'
+          import glob, zipfile, sys
+          hits = glob.glob("dist/dsh-desktop-*-windows-x64.zip")
+          if not hits:
+              sys.exit("✗ 没找到 Windows zip")
+          names = zipfile.ZipFile(hits[0]).namelist()
+          assert any(n.endswith("dsh-desktop.exe") for n in names), "zip 里没有主程序"
+          print("✓ zip 里有主程序")
+          PY
 
       - uses: actions/upload-artifact@v4
         with:

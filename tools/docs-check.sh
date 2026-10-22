@@ -19,6 +19,7 @@ python3 - "$ROOT" <<'PY'
 import os
 import re
 import sys
+import subprocess
 import glob
 
 root = sys.argv[1]
@@ -147,9 +148,24 @@ check("src 下每个 .kt 都登记了", not unlisted, f"未登记：{', '.join(u
 check("登记的 .kt 都还存在", not ghost, f"已不存在：{', '.join(ghost)}")
 
 # A.3 里引用的 tools/ 与 build-windows.bat 必须存在
+# 关键：判据用 `git ls-files` 而不是 os.path.exists。开发机上 tools/windows-libs/ 存在，
+# 但它被 .gitignore 排除、CI 检出后没有——按"本地存在"判会绿，推上去就红。
 tool_refs = set(re.findall(r"`((?:tools/|build-windows\.bat)[^`\s]*)`", codemap))
-missing_tools = [p for p in sorted(tool_refs) if not os.path.exists(os.path.join(root, p.rstrip("/")))]
-check("CODEMAP 引用的工具脚本都存在", not missing_tools, f"缺：{', '.join(missing_tools)}")
+
+
+def is_tracked(rel):
+    try:
+        rc = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", rel],
+            cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ).returncode
+        return rc == 0
+    except OSError:          # 没有 git 就退回"文件在不在"
+        return os.path.exists(os.path.join(root, rel.rstrip("/")))
+
+
+missing_tools = [p for p in sorted(tool_refs) if not is_tracked(p.rstrip("/"))]
+check("CODEMAP 引用的工具脚本都已入库", not missing_tools, f"缺：{', '.join(missing_tools)}")
 
 # B 表里写的 `DshApi.xxx()` / `ApiExt.xxx()` 必须真有这个方法
 api_src = (read("src/main/kotlin/io/github/westanke/dshdesktop/data/DshApi.kt") or "") + \

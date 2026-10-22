@@ -74,6 +74,9 @@ if [ -z "$PY" ]; then
   done
 fi
 [ -n "$PY" ] || { echo "✗ 找不到 Python" >&2; exit 1; }
+# 同 tools/build.sh：Windows 控制台默认不是 UTF-8，Python 打印中文会崩
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
 
 echo "▸ 1/4 编译并打 jar（目标平台 $PLATFORM）"
 TARGET_PLATFORM="$PLATFORM" "$ROOT/tools/build.sh" jar
