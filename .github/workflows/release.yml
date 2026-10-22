@@ -132,7 +132,11 @@ jobs:
 
       - name: 校验
         shell: bash
-        # 不用 unzip：Git Bash 的镜像里不一定带它，Python 一定有
+        # 不用 unzip：Git Bash 的镜像里不一定带它，Python 一定有。
+        # PYTHONUTF8 必须显式给：Windows 控制台不是 UTF-8，打印 ✓ 会 UnicodeEncodeError。
+        env:
+          PYTHONUTF8: '1'
+          PYTHONIOENCODING: utf-8
         run: |
           set -euo pipefail
           ls -lh dist/

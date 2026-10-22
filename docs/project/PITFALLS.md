@@ -590,4 +590,4 @@ export PYTHONIOENCODING=utf-8
 跨平台的构建脚本里，Python 输出、写文件（`open(..., encoding="utf-8")`）都要显式处理，
 不能指望控制台是 UTF-8。
 
-**防回归**：脚本里出现中文提示时，先确认这两行已经 export；CI 的 Windows job 每次都会验证。
+**防回归**：脚本里出现中文提示时，先确认这两行已经 export；**工作流里内联的 python 同样要设**（在 step 上加 env: PYTHONUTF8）——构建脚本 export 的变量不会传给后面单独起的一步，我在校验步骤上就这样二次踩过。
