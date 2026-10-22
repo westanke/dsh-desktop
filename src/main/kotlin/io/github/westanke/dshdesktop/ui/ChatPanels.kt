@@ -1,8 +1,10 @@
 package io.github.westanke.dshdesktop.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,7 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -171,42 +176,49 @@ private fun riskLabel(risk: String): String = when (risk) {
 }
 
 /**
- * 交付物卡片。
+ * 交付物卡片：**一个文件一张卡**，对齐官方 Web 的产出卡片。
  *
- * 一轮跑完端出来的文件，比正文更值得留一张卡片：点一下直接跳到文件页对着看。
+ * 官方那张卡的结构是「类型色块 + 主副两行 + 右侧箭头」，一眼就知道点下去是打开哪个文件。
+ * 早先这里是一整块列表（一行标题 + 若干行），文件一多就退化成"一堆文件名"。
+ *
+ * 色块颜色按文件类型给**固定品牌色**（`.docx` 蓝、`.xlsx` 绿、`.pdf` 红……），
+ * 不跟着主题变：这些颜色是用户对文件类型的既有认知，跟着主题走反而认不出。
  */
 @Composable
 fun DeliverableCard(files: List<DeliverableFile>, onOpen: (String) -> Unit) {
     val colors = LocalAppColors.current
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm))
-            .padding(vertical = 10.dp),
-    ) {
-        Text(
-            "产出文件 · ${files.size}",
-            style = MaterialTheme.typography.labelMedium,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(horizontal = 12.dp),
-        )
-        Spacer(Modifier.size(6.dp))
-        files.forEachIndexed { index, file ->
-            if (index > 0) {
-                HorizontalDivider(color = colors.hairline, modifier = Modifier.padding(horizontal = 12.dp))
-            }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        files.forEach { file ->
+            val ext = file.name.substringAfterLast('.', "").lowercase()
+            val (badgeLabel, badgeColor) = fileBadge(ext)
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Tokens.radiusMd))
+                    .border(1.dp, colors.hairline, RoundedCornerShape(Tokens.radiusMd))
                     .clickable { onOpen(file.path) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .background(badgeColor, RoundedCornerShape(Tokens.radiusSm)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        badgeLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = Color.White,
+                        maxLines = 1,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         file.name,
-                        style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace),
-                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -221,10 +233,33 @@ fun DeliverableCard(files: List<DeliverableFile>, onOpen: (String) -> Unit) {
                         )
                     }
                 }
-                Text("定位", style = MaterialTheme.typography.labelSmall, color = colors.textTertiary)
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "在文件页打开",
+                    tint = colors.textTertiary,
+                    modifier = Modifier.size(18.dp),
+                )
             }
         }
     }
+}
+
+/** 文件类型色块：返回（块内文字，块底色）。扩展名在这里是内容的一部分，不是配色。 */
+private fun fileBadge(ext: String): Pair<String, Color> = when (ext) {
+    "doc", "docx" -> "DOC" to Color(0xFF2B579A)
+    "xls", "xlsx" -> "XLS" to Color(0xFF217346)
+    "ppt", "pptx" -> "PPT" to Color(0xFFD24726)
+    "pdf" -> "PDF" to Color(0xFFC0392B)
+    "md" -> "MD" to Color(0xFF4C5866)
+    "txt", "log" -> "TXT" to Color(0xFF6B7785)
+    "csv" -> "CSV" to Color(0xFF2F7D5B)
+    "json", "yaml", "yml", "toml" -> "{}" to Color(0xFF5A6472)
+    "png", "jpg", "jpeg", "gif", "webp", "bmp" -> "IMG" to Color(0xFF7A5AA8)
+    "zip", "gz", "tar", "7z", "rar" -> "ZIP" to Color(0xFF8A6A3B)
+    "mp4", "mov", "webm" -> "VID" to Color(0xFF4A6B8A)
+    "mp3", "wav", "flac" -> "AUD" to Color(0xFF8A5A7A)
+    else -> if (ext.isBlank()) "文件" to Color(0xFF6B7785) else ext.take(3).uppercase() to Color(0xFF6B7785)
 }
 
 /** 消息区顶部的一行量级：轮次、工具次数、失败数、产出数。没有内容时整行不占位。 */

@@ -2,14 +2,17 @@ package io.github.westanke.dshdesktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.DropdownMenu
@@ -56,6 +60,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.westanke.dshdesktop.AppState
 import io.github.westanke.dshdesktop.addAttachments
 import io.github.westanke.dshdesktop.applyPermissionPreset
@@ -109,6 +114,12 @@ fun Composer(state: AppState) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(Modifier.widthIn(max = Tokens.contentMaxWidth).fillMaxWidth()) {
+            // 思考过程挂在输入框上方：它跟着"这一轮正在跑"走，不占消息流的位置。
+            // 否则推理一长，正在生成的正文被顶出屏外，人反而看不到关键点。
+            if (state.streamingReasoning.isNotBlank()) {
+                ReasoningShelf(state.streamingReasoning)
+                Spacer(Modifier.size(6.dp))
+            }
             if (suggestions.isNotEmpty()) {
                 CommandSuggestions(
                     items = suggestions,
@@ -249,6 +260,80 @@ fun Composer(state: AppState) {
                 )
                 Spacer(Modifier.weight(1f))
                 ChatStatsBar(state.stats)
+            }
+        }
+    }
+}
+
+/**
+ * 思考过程悬挂条：贴在输入框上方的那块。
+ *
+ * 三条来自官方 Web 的观察：
+ * 1. **默认折叠成一行**（高 36dp）。推理往往比正文长得多，全摊开会盖住整个输入区；
+ * 2. **展开也限高 132dp**，超出的自己滚——不让它把输入框顶到屏外；
+ * 3. **跟着这一轮走**：这一轮结束它就消失，历史里的思考仍留在消息流的折叠块里。
+ */
+@Composable
+private fun ReasoningShelf(text: String) {
+    val colors = LocalAppColors.current
+    var expanded by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusMd))
+            .border(
+                width = 1.dp,
+                color = colors.hairline,
+                shape = RoundedCornerShape(Tokens.radiusMd),
+            )
+            .then(if (expanded) Modifier else Modifier.height(36.dp)),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatusDot(MaterialTheme.colorScheme.primary, 5)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "思考中",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.textSecondary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            Text(
+                "${text.length} 字",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textTertiary,
+            )
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (expanded) "收起思考" else "展开思考",
+                tint = colors.textTertiary,
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        if (expanded) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp, max = 132.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.5.sp,
+                        lineHeight = 17.sp,
+                    ),
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                )
             }
         }
     }

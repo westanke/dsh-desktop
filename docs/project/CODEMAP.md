@@ -43,7 +43,7 @@
 | `src/data/DshApi.kt` | 874 | **唯一网络边界**：上游 kotlin-sdk 的 `DshWorkspaceClient`（含 provider / plugin / job / workspace 管理） | `DshWorkspaceClient`、`execute()`、`executeJson()`、`ensureSuccess()`、`endpoint()`、`WorkspaceApiException` | `AppState*` |
 | `src/data/ApiExt.kt` | 311 | SDK 没覆盖的端点：会话列表、历史分页、路径反查、提问、附件、插件清单 | `listChatSessions()`、`listMessagesPage()`、`resolvePath()`、`answerQuestion()`、`uploadEntry()`、`PromptPart`、`sendMessageParts()`、`uploadSessionAttachment()`、`readAttachment()`、`listPlugins()`、`setPluginLoaded()`、`ChatSession` | `AppState*` |
 | `src/data/Attachments.kt` | 54 | 待发送附件的内存表示与 MIME 猜测 | `PendingAttachment`、`MAX_ATTACHMENT_BYTES`、`guessMediaType()` | `AppStateProjections`、`ui/Composer` |
-| `src/data/ChatHistory.kt` | 382 | **唯一历史投影出口**：事件 → 可渲染条目（含图片附件引用） | `parseHistory()`、`unwrapEvent()`、`mergeToolRuns()`、`contentAttachments()`、`HistoryPage`、`ChatItem`（7 个子类）、`DeliverableFile`、`ChatStats`、`chatStats()` | `AppState`、`AppStateChat`、`ui/ChatScreen` |
+| `src/data/ChatHistory.kt` | 388 | **唯一历史投影出口**：事件 → 可渲染条目（含图片附件引用） | `parseHistory()`、`unwrapEvent()`、`mergeToolRuns()`、`contentAttachments()`、`HistoryPage`、`ChatItem`（7 个子类）、`DeliverableFile`、`ChatStats`、`chatStats()` | `AppState`、`AppStateChat`、`ui/ChatScreen` |
 | `src/data/SessionProjections.kt` | 201 | 投影解析：TODO、权限档位、断档 seq、按轮次轨迹（纯函数，无 Compose） | `TodoItem`、`PermissionState`、`TraceTurn`、`TraceStep`、`parseTodos()`、`parsePermission()`、`parseMaxSeq()`、`buildTrace()` | `AppStateProjections`、`ui/ChatSidePanel` |
 | `src/data/ToolBlockView.kt` | 263 | 工具调用的**专用视图分发**（纯函数，解析失败一律回落 Generic） | `ToolBlockView`、`toolBlockView()`、`toolActionPhrase()`、`extractReadBody()`、`stripAnsiEscapes()`、`toolDurationMs()` | `ui/ToolBlocks`、`tools/VerifyHistory.kt` |
 | `src/data/Markdown.kt` | 489 | Markdown **解析层**（纯函数，无 Compose 依赖） | `parseMarkdown()`、`parseInline()`、`parseTableRow()`、`normalizeRow()`、`looksLikeTableRow()`、`MdBlock`、`InlineSpan` | `ui/MarkdownView`、`tools/VerifyMarkdown.kt` |
@@ -56,12 +56,12 @@
 | `src/ui/MarkdownView.kt` | 396 | Markdown **渲染层**：表格（横向滚动 + 列宽自适应 + 斑马纹）、标题、列表、引用、代码块 | `MarkdownText()`、`MarkdownTable()`、`CodeBlock()`、`columnWidths()`、`copyToClipboard()` | `ui/ChatScreen` |
 | `src/ui/RemoteImage.kt` | 127 | 会话图片附件：按需拉取 + LRU 缓存 + 大图预览状态 | `RemoteImage()`、`ImageStrip()`、`ImagePreview`、`clearImageCache()` | `ui/ChatScreen`、`ui/App` |
 | `src/ui/ConnectScreen.kt` | 175 | 连接页：地址 + 一次性配对码 | `ConnectScreen()` | `ui/App` |
-| `src/ui/ChatScreen.kt` | 707 | 会话页：页头（抽屉开关 / 模型 / 推理等级 / Agent 预设）、消息流、断档提示、装配 | `ChatScreen()`、`ChatTopBar()`、`ChatPanelToggles()`、`ModelPicker()`、`MessageRow()`、`CollapsibleBlock()`、`NoticeBar()` | `ui/App` |
+| `src/ui/ChatScreen.kt` | 716 | 会话页：页头（抽屉开关 / 模型 / 推理等级 / Agent 预设）、消息流（**上下文注入默认折叠**）、断档提示、装配 | `ChatScreen()`、`ChatTopBar()`、`ChatPanelToggles()`、`ModelPicker()`、`MessageRow()`、`CollapsibleBlock()`、`NoticeBar()` | `ui/App` |
 | `src/ui/ChatSidePanel.kt` | 461 | 会话右侧抽屉：待办 / 轨迹 / 后台任务 / 服务端能力面 | `ChatSidePanel()`、`TodosBody()`、`TraceBody()`、`JobsBody()`、`ServerBody()` | `ui/ChatScreen` |
 | `src/ui/Sidebar.kt` | 666 | 侧栏：品牌、通栏「新会话」（含工作区改名/移除）、五页导航、工作区头、会话行菜单、身份卡 | `Sidebar()`、`NavItem()`、`SectionHeader()`、`SessionRow()`、`RenameDialog()`、`relativeTime()` | `ui/App` |
-| `src/ui/Composer.kt` | 542 | 输入区：Enter 发送 / Shift+Enter 换行、插话、`/` 命令候选、**附件托盘**、**权限档位下拉** | `Composer()`、`PermissionPill()`、`AttachmentTray()`、`ImageChip()`、`pickAttachments()` | `ui/ChatScreen` |
-| `src/ui/ToolBlocks.kt` | 325 | 工具专用块渲染：read / bash / edit / 通用 | `ToolCallBlock()`、`ReadBody()`、`TerminalBody()`、`DiffBody()`、`GenericBody()` | `ui/ChatScreen` |
-| `src/ui/ChatPanels.kt` | 240 | 审批卡片（可代签）、交付物卡片、统计一行 | `ApprovalPanel()`、`DeliverableCard()`、`ChatStatsBar()` | `ui/ChatScreen` |
+| `src/ui/Composer.kt` | 627 | 输入区：Enter 发送 / Shift+Enter 换行、插话、`/` 命令候选、**附件托盘**、**权限档位下拉**、**上方悬挂的思考过程** | `Composer()`、**`ReasoningShelf()`（思考悬挂条）**、`PermissionPill()`、`AttachmentTray()`、`ImageChip()`、`pickAttachments()` | `ui/ChatScreen` |
+| `src/ui/ToolBlocks.kt` | 362 | 工具专用块渲染：read / bash（**长输出折叠**）/ edit / 通用 | `ToolCallBlock()`、`ReadBody()`、`TerminalBody()`、`DiffBody()`、`GenericBody()` | `ui/ChatScreen` |
+| `src/ui/ChatPanels.kt` | 275 | 审批卡片（可代签）、**交付物卡片（一个文件一张，类型色块 + 主副标题）**、统计一行 | `ApprovalPanel()`、**`DeliverableCard()`（一个文件一张卡）**、`fileBadge()`、`ChatStatsBar()` | `ui/ChatScreen` |
 | `src/ui/FilesScreen.kt` | 679 | 文件页：授权根 chip / 列表 / **按类型分流的预览**（Markdown 渲染 · 图片 · 源码 · 交系统）+ 编辑器 + 移动 | `FilesScreen()`、`RootChips()`、`FileListPane()`、`PreviewPane()`、`TypeBadge()`、`MiniAction()`、`MarkdownPreviewPane()`、`SourcePane()`、`ImagePane()`、`UnsupportedPane()` | `ui/App` |
 | `src/ui/ModelsScreen.kt` | 486 | 模型页：供应商卡片、编辑（baseURL/密钥）、发现模型、自定义 provider、全局模型目录 | `ModelsScreen()`、`ProviderCard()`、`ProviderEditor()`、`CreateProviderDialog()` | `ui/App` |
 | `src/ui/PluginsScreen.kt` | 246 | 插件页：清单、启停开关、检查更新、`available:false` 的解释 | `PluginsScreen()`、`PluginCard()` | `ui/App` |

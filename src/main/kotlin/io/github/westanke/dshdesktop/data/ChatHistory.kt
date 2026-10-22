@@ -91,6 +91,12 @@ sealed interface ChatItem {
         /** info | warning | error */
         val level: String,
         val text: String,
+        /**
+         * `context` = 上下文注入（记忆、系统提示）。这类内容不是对话的一部分，
+         * 官方 Web 把它们挪进「上下文」页签，客户端里默认**折叠成一行**，
+         * 不占视觉重心。其它类型（失败原因、取消、超长）才直接显示。
+         */
+        val kind: String = "plain",
     ) : ChatItem
 
     /**
@@ -269,7 +275,7 @@ fun parseHistory(events: List<JsonElement>): List<ChatItem> {
                     ChatItem.User("$seq-user", seq, text, time, images)
                 } else {
                     // 上下文注入（记忆、系统提示）不是用户说的话，但也不能丢——降级为提示行。
-                    ChatItem.Notice("$seq-context", seq, "info", "上下文注入\n$text")
+                    ChatItem.Notice("$seq-context", seq, "info", "上下文注入\n$text", kind = "context")
                 }
             }
 

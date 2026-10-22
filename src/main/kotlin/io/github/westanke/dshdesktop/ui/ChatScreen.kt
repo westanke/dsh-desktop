@@ -131,7 +131,7 @@ fun ChatScreen(state: AppState) {
                     }
                     if (streaming) {
                         item(key = "streaming") {
-                            StreamingBubble(state.streamingReasoning, state.streamingText)
+                            StreamingBubble(state.streamingText)
                         }
                     }
                     if (state.approvals.isNotEmpty()) {
@@ -508,19 +508,17 @@ private fun ModelPicker(state: AppState) {
     }
 }
 
+/**
+ * 流式正文。
+ *
+ * **思考内容不在这里**：官方 Web 把推理过程挂在输入框上方（跟着"正在跑"这件事走），
+ * 消息流里只留正文，否则推理一长，正文被顶到屏外，人反而看不到正在说什么。
+ * 悬挂的那块在 `Composer` 的 `ReasoningShelf`。
+ */
 @Composable
-private fun StreamingBubble(reasoning: String, text: String) {
+private fun StreamingBubble(text: String) {
     val colors = LocalAppColors.current
     Column(Modifier.fillMaxWidth()) {
-        if (reasoning.isNotEmpty()) {
-            CollapsibleBlock(
-                title = "思考中",
-                body = reasoning,
-                tone = colors.textSecondary,
-                initiallyExpanded = false,
-            )
-            Spacer(Modifier.size(8.dp))
-        }
         if (text.isNotEmpty()) {
             MarkdownText(text)
         }
@@ -685,23 +683,34 @@ private fun MessageRow(state: AppState, item: ChatItem) {
 
         is ChatItem.Deliverable -> DeliverableCard(item.files) { state.openAbsolutePath(it) }
 
-        is ChatItem.Notice -> Row(
-            Modifier
-                .fillMaxWidth()
-                .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm))
-                .padding(12.dp),
-        ) {
-            val tone = when (item.level) {
-                "error" -> colors.danger
-                "warning" -> colors.warning
-                else -> colors.textSecondary
-            }
-            Text(
-                item.text,
-                style = MaterialTheme.typography.bodySmall,
-                color = tone,
-                modifier = Modifier.fillMaxWidth(),
+        // 上下文注入（记忆、系统提示）不是对话内容：官方 Web 把它们放进「上下文」页签，
+        // 这里折叠成一行，想看再点开。失败原因、取消这类提示照旧直显——那是要人看见的。
+        is ChatItem.Notice -> if (item.kind == "context") {
+            CollapsibleBlock(
+                title = "上下文注入",
+                body = item.text.substringAfter('\n').trim(),
+                tone = colors.textTertiary,
+                initiallyExpanded = false,
             )
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm))
+                    .padding(12.dp),
+            ) {
+                val tone = when (item.level) {
+                    "error" -> colors.danger
+                    "warning" -> colors.warning
+                    else -> colors.textSecondary
+                }
+                Text(
+                    item.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = tone,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

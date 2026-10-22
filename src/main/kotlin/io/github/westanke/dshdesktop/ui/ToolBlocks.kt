@@ -190,9 +190,17 @@ private fun ReadBody(view: ToolBlockView.Read) {
     }
 }
 
+/**
+ * bash 的专用视图：**命令一行 + 输出一段**，长输出默认折起来。
+ *
+ * 命令单独占一行并保留 `$` 前缀，是为了和它前面的`工具: bash`标题、后面的输出
+ * 在视觉上分成三截——混在一起时，长输出会把"到底跑了什么命令"吞掉。
+ * 输出超过 6 行就折叠：一条 `npm run build` 动辄几百行，全打印出来这一轮就没法看了。
+ */
 @Composable
 private fun TerminalBody(view: ToolBlockView.Terminal) {
     val colors = LocalAppColors.current
+    var expanded by remember { mutableStateOf(false) }
     Text(
         "$ " + view.command.ifBlank { "（没有命令）" },
         style = MaterialTheme.typography.bodySmall.copy(
@@ -230,7 +238,36 @@ private fun TerminalBody(view: ToolBlockView.Terminal) {
             color = colors.textTertiary,
         )
 
-        else -> MonoScrollable(view.output.trimEnd(), 420, colors.textSecondary)
+        else -> {
+            val lines = view.output.trimEnd().split('\n')
+            val foldable = lines.size > 6
+            val shown = if (foldable && !expanded) lines.take(6).joinToString("\n") else lines.joinToString("\n")
+            Text(
+                shown,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                ),
+                color = colors.textSecondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = if (expanded) 420.dp else 132.dp)
+                    .verticalScroll(rememberScrollState())
+                    .background(colors.codeBackground, RoundedCornerShape(Tokens.radiusSm))
+                    .padding(10.dp),
+            )
+            if (foldable) {
+                Text(
+                    if (expanded) "收起" else "展开全部 ${lines.size} 行",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clickable { expanded = !expanded },
+                )
+            }
+        }
     }
 }
 
