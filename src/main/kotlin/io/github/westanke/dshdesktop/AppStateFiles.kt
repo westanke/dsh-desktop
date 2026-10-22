@@ -276,12 +276,14 @@ fun AppState.restoreTrash(id: String) {
     }
 }
 
-/** 会话里出现的绝对路径，交给服务端翻译成 rootId + 相对路径再打开文件页。 */
 /**
  * 按服务器绝对路径定位到文件页。
  *
- * @param preview 顺便把这个文件打开预览。命令行 `-Ddsh.openPath=` 走这条路，
- *   也方便以后把"点交付物卡片"从"定位目录"升级成"直接看内容"。
+ * 会话里出现的绝对路径（页头的 cwd、命令行 `-Ddsh.openPath=`）先交给服务端
+ * `roots/resolve` 翻译成 rootId + 相对路径，再去文件页把目录列出来。
+ * 目标是**定位**，不是打开 —— 要点开某个文件用 [openFileByPath]。
+ *
+ * @param preview 顺便把这个文件打开预览（只对能内嵌的类型有意义）。
  */
 fun AppState.openAbsolutePath(absolutePath: String, preview: Boolean = false) {
     scope.launch {
@@ -309,6 +311,66 @@ fun AppState.openAbsolutePath(absolutePath: String, preview: Boolean = false) {
                 showToast("已定位到 ${resolved.path.ifEmpty { "/" }}")
             }
             .onFailure { showToast(AppState.human(it)) }
+    }
+}
+
+/**
+ * 点交付物卡片：直接把**这个文件**打开。
+ *
+ * 与 [openAbsolutePath] 的分工：那个是"定位到目录"，这个是"打开这个文件"。
+ * 卡片上写的是文件名，点下去就该看到内容，而不是被扔进文件列表再自己找一遍。
+ *
+ * 能不能在客户端里打开由 [classifyFile] 判（只看名字，与文件页预览同一套口径）：
+ * - **Markdown / 文本 / 图片** → 文件页内嵌预览；
+ * - **其余**（PDF / Office / 压缩包 / 二进制）→ [openEntryExternally] 下载到缓存后
+ *   交给系统默认程序 —— 本客户端没有这些格式的渲染器，"不能打开就交给系统去判断"。
+ * - 图片超过 [MAX_IMAGE_BYTES] 同样直接走系统：内嵌会被降级成"看不了"再让人点一次，
+ *   不如一开始就交给系统，省一次无效跳转。
+ *
+ * 三个兜底：解析失败说人话；路径指向目录就退回 [openDirectory]；
+ * 列父目录找不到这个条目（文件已被删/移走）也退回列目录并说明。
+ */
+fun AppState.openFileByPath(absolutePath: String) {
+    scope.launch {
+        val prepared = runCatching {
+            withContext(Dispatchers.IO) {
+                val resolved = client().resolvePath(absolutePath)
+                val parent = resolved.path.substringBeforeLast('/', "")
+                // 列一次父目录才能拿到 FileEntry（size / kind 只有条目里有）：
+                // resolve 只给路径，预览和外呼都要那个条目
+                val page = client().listEntries(resolved.rootId, parent)
+                Triple(resolved, parent, page)
+            }
+        }.getOrElse {
+            showToast(AppState.human(it))
+            return@launch
+        }
+        val (resolved, parent, page) = prepared
+        nav = Nav.Files
+        activeRootId = resolved.rootId
+        currentPage = page
+        currentPath = page.path
+        filesError = null
+
+        val entry = page.entries.firstOrNull { it.path == resolved.path }
+        if (entry == null) {
+            openDirectory(parent)
+            showToast("这个文件已经不在原位置了：${resolved.path}")
+            return@launch
+        }
+        if (entry.kind == "directory") {
+            openDirectory(entry.path)
+            return@launch
+        }
+
+        val inline = when (classifyFile(entry.name).kind) {
+            FileKind.Markdown, FileKind.Text -> true
+            FileKind.Image -> entry.size <= MAX_IMAGE_BYTES
+            FileKind.Other -> false
+        }
+        // 仍然停在文件页：外呼失败的话（openEntryExternally 只写 filesError），
+        // 这里还能看到"打不开"的原因，以及"用系统程序打开 / 下载"两个按钮
+        if (inline) previewEntry(entry) else openEntryExternally(entry)
     }
 }
 

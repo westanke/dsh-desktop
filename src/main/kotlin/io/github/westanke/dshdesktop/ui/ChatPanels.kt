@@ -236,7 +236,7 @@ fun DeliverableCard(files: List<DeliverableFile>, onOpen: (String) -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "在文件页打开",
+                    contentDescription = "打开这个文件",
                     tint = colors.textTertiary,
                     modifier = Modifier.size(18.dp),
                 )

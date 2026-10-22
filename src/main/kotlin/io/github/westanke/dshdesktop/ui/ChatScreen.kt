@@ -60,6 +60,7 @@ import io.github.westanke.dshdesktop.chooseAgentPreset
 import io.github.westanke.dshdesktop.data.JobStatus
 import io.github.westanke.dshdesktop.loadAgentPresets
 import io.github.westanke.dshdesktop.openAbsolutePath
+import io.github.westanke.dshdesktop.openFileByPath
 import io.github.westanke.dshdesktop.refreshJobs
 import io.github.westanke.dshdesktop.resyncHistory
 import io.github.westanke.dshdesktop.seqGapHint
@@ -151,7 +152,7 @@ fun ChatScreen(state: AppState) {
                                     style = MaterialTheme.typography.labelMedium,
                                     color = colors.textTertiary,
                                 )
-                                DeliverableCard(outsideDeliverables) { state.openAbsolutePath(it) }
+                                DeliverableCard(outsideDeliverables) { state.openFileByPath(it) }
                             }
                         }
                     }
@@ -732,7 +733,7 @@ private fun MessageRow(state: AppState, item: ChatItem) {
         // 相邻工具调用合并后的一组：默认折叠，展开才是逐条。
         is ChatItem.ToolGroup -> ToolGroupBlock(item)
 
-        is ChatItem.Deliverable -> DeliverableCard(item.files) { state.openAbsolutePath(it) }
+        is ChatItem.Deliverable -> DeliverableCard(item.files) { state.openFileByPath(it) }
 
         // 上下文注入（记忆、系统提示）不是对话内容：官方 Web 把它们放进「上下文」页签，
         // 这里折叠成一行，想看再点开。失败原因、取消这类提示照旧直显——那是要人看见的。

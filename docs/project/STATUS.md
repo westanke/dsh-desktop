@@ -60,6 +60,37 @@
 
 **没做的**：UI 观感仍未真机确认（沙箱 `/usr/share`、`/opt` 只读，装不进去）。
 
+## v1.0.0 第十三轮 · 文件卡片点击直接打开文件（2026-10-22）
+
+**基于什么**：用户一句「文件卡片 点击跳转到目录了，应该直接打开文件，不能打开直接走系统去判断」。
+
+**根因**：交付物卡的 `onOpen` 调的是 `openAbsolutePath(path)`，而它（`preview` 默认 false）
+的语义是**定位目录**——`resolvePath` 之后只 `openDirectory(parent)`。卡片上写的是文件名，
+点下去却被扔进文件列表再自己找一遍，等于"跳转"不是"打开"。
+
+**干了什么**
+
+1. 新增 `AppStateFiles.openFileByPath()`（**只动文件卡这条路径**，
+   `openAbsolutePath` 保留给页头 cwd 与 `-Ddsh.openPath=` —— 那两处的语义本来就是定位）：
+   `resolvePath` → 列一次父目录拿到 `FileEntry`（`size`/`kind` 只有条目里有）
+   → 按 `classifyFile()` 分流，与文件页预览**同一套口径**。
+2. 分流结果：Markdown / 文本 / 图片 → `previewEntry()` 内嵌打开；
+   其余（PDF / Office / 压缩包 / 二进制）→ `openEntryExternally()` 下到缓存再交系统。
+3. 图片超过 `MAX_IMAGE_BYTES`（8 MiB）也直接走系统：内嵌只会被降级成"看不了"再让人点一次。
+4. 三个兜底：解析失败说人话；路径指向目录退回列目录；父目录里找不到这条目
+   （已被删/移走）退回列目录并说明「已经不在原位置」。
+5. 外呼时仍停在文件页 —— `openEntryExternally` 失败只写 `filesError`，
+   不跳过去的话用户什么都看不到，跳过去还能看见原因和「用系统程序打开 / 下载」两个按钮。
+6. `ui/ChatScreen.kt` 两处 `DeliverableCard`（消息流内 + "更早轮次的产出文件"区）改调新动作；
+   卡片箭头 `contentDescription` 从"在文件页打开"改为"打开这个文件"。
+
+**测了什么**
+
+- 编译 0 error（`tools/build.sh` 63s）。
+
+**没做的**：真机点击验证（沙箱装不了 deb）。待装包后确认两类路径——
+`.md`/`.png` 应在文件页内嵌打开；`.docx`/`.pdf` 应拉起 WPS/文档查看器。
+
 ---
 
 ## v1.0.0 修复 · 历史会话里没有文件卡（2026-10-22）
