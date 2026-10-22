@@ -41,12 +41,12 @@ tools/verify-markdown.sh # Markdown 解析用例
 
 ## ⑤ 产物
 
-| 平台 | 谁产 | 产物 |
-| --- | --- | --- |
-| UOS / Linux x64 | 本机 `tools/package.sh` | `dist/dsh-desktop_<ver>-1_amd64.deb`（自带 JRE，约 90 MB） |
-| Linux arm64 | CI `release.yml`（ubuntu-22.04-arm） | `dsh-desktop_<ver>-1_arm64.deb` |
-| Windows x64 | CI `release.yml`（windows-latest） | `dsh-desktop-<ver>-windows-x64.zip`（镜像有 WiX 时另出 msi） |
-| 便携（Linux） | 手工，见下 | `dist/dsh-desktop-<ver>-portable-linux-x64.tar.gz`（需本机 JDK 17） |
+| 平台 | 谁产 | 产物 | v1.0.0 实测体积 |
+| --- | --- | --- | --- |
+| UOS / Linux x64 | 本机 `tools/package.sh` 或 CI | `dist/dsh-desktop_<ver>-1_amd64.deb`（自带 JRE） | 91 MB |
+| Linux arm64 | CI `release.yml`（ubuntu-22.04-arm） | `dsh-desktop_<ver>-1_arm64.deb` | 89 MB |
+| Windows x64 | CI `release.yml`（windows-latest） | `dsh-desktop-<ver>-windows-x64.zip`，镜像自带 WiX 时另出 msi | zip 96 MB / msi 96 MB |
+| 便携（Linux） | 手工，见下 | `dist/dsh-desktop-<ver>-portable-linux-x64.tar.gz`（需本机 JDK 17） | — |
 
 **便携包**（`package.sh` 不产，手工打；`build/portable-stage` 是暂存区）：
 

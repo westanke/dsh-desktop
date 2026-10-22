@@ -1,7 +1,7 @@
 # 状态（STATUS）
 
-- 日期：**2026-10-21**
-- 版本：**1.0.0**（已将 CI 与双远端搭好，等首个 `v1.0.0` tag 由 GitHub 出三平台产物）
+- 日期：**2026-10-22**
+- 版本：**1.0.0**（`v1.0.0` tag 已发，Release 由 GitHub 现场构建并产出三平台产物）
 - 平台：UOS / Deepin x64 与 arm64（deb）、Windows x64（zip + msi）
 
 ---
@@ -32,10 +32,20 @@ github 自己打包 Windows 和 ARM 架构的 deb」。也就是把这个只在�
 
 **测了什么**
 
-- 本机 `tools/build.sh` 1m14s→57s 编译 0 error；`tools/package.sh` 产出
+- 本机 `tools/build.sh` 编译 0 error（57s）；`tools/package.sh` 产出
   `dist/dsh-desktop_1.0.0-1_amd64.deb`（90 MB），`dpkg-deb -c` 桌面入口自检通过。
 - `tools/docs-check.sh` **28/28 全绿**（版本检查改成盯 `version.txt`）。
-- 三平台工作流待首个 CI 运行验证；Windows 与 arm64 的产物**尚未真跑**，等 CI 结论。
+- **CI 三平台全绿**（`release.yml` run 39700809940）：
+  `deb · amd64` 2m50s、`deb · arm64` 2m37s、`zip · windows-x64` 1m54s。
+- **`v1.0.0` Release 已发**（run 39701168375，发布步骤 13s）：
+  amd64 deb 91 MB、arm64 deb 89 MB、Windows zip 96 MB、msi 96 MB、`SHA256SUMS`。
+- `mirror-sync.yml` 手工与定时各跑通两次，Gitee → GitHub 单向镜像正常。
+- **仍未真机验证**：三个产物只验到"包内结构与架构对"，没在 UOS / Windows / arm64 机器上装过。
+
+**这一轮踩的四个坑**（都进了 `PITFALLS.md`）：
+Windows 类路径要 `;` + `cygpath`；skiko 运行时必须按平台剔除；
+`dpkg-deb … | grep -q` 会因管道提前关闭把流水线判红；
+Windows 上 Python 打印中文要 `PYTHONUTF8`（脚本与内联 step 各要设一次）。
 
 ---
 

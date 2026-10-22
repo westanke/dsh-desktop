@@ -67,12 +67,31 @@ Windows 和 ARM 架构的 deb」。
 - `tools/package.sh` 全流程：jar 846 个类 → jpackage → 补桌面入口 → 重打 deb
   → `dpkg-deb -c` 自检通过，产物 `dsh-desktop_1.0.0-1_amd64.deb`（90 MB）。
 - `tools/docs-check.sh` **28/28**。
-- **未验证**：Windows / arm64 两条 CI 线（要等推送后看 run）；本机没有 arm64 机器。
+
+### CI 实测（`release.yml`，三平台）
+
+| job | runner | 耗时 | 结果 |
+| --- | --- | --- | --- |
+| `deb · amd64` | ubuntu-22.04 | 2m50s | ✓ 91 MB |
+| `deb · arm64` | ubuntu-22.04-arm | 2m37s | ✓ 89 MB |
+| `zip · windows-x64` | windows-latest | 1m54s | ✓ zip 96 MB + msi 96 MB |
+| `发布 Release` | ubuntu-latest | 13s | ✓ 五份资产 + `SHA256SUMS` |
+
+`ci.yml` 45s–1m04s 全绿；`mirror-sync.yml` 手工与定时各跑通两次。
 
 ### 踩到的坑（已进 `PITFALLS.md`）
 
-跑 `package.sh` 的同时我在编辑它。bash 按字节偏移流式读脚本，读到半行，报出
-`行227: -vE：未找到命令`——看着像脚本 bug，其实是"边跑边改"。重跑即正常。
+1. 跑 `package.sh` 的同时我在编辑它。bash 按字节偏移流式读脚本，读到半行，报出
+   `行227: -vE：未找到命令`——看着像脚本 bug，其实是"边跑边改"。重跑即正常。
+2. Windows 打 jar 崩 `UnicodeEncodeError`：Python 在 Windows 控制台按 cp1252 输出，
+   中文提示与 `▸` 编码不了。脚本里 export `PYTHONUTF8=1` / `PYTHONIOENCODING=utf-8`，
+   **工作流里内联的 python 要再设一次**（构建脚本 export 的变量不跨 step）。
+3. arm64 校验 `dpkg-deb -c … | grep -q`：grep 命中即关管道，上游 tar 收 EPIPE 报
+   `tar: stdout: write error`，整条流水线判红。改成先取回再判断。
+4. docs-check 原来按"本地文件在不在"判 `tools/…` 引用，本机有 `tools/windows-libs/`
+   但 CI 检出后没有——外绿内红。改成用 `git ls-files` 判"是否入库"。
+
+**未做真机验证**：三个产物只验到包内结构与架构正确，没在真实机器上装过。
 
 ---
 

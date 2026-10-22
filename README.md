@@ -281,7 +281,7 @@ GitHub 的 `mirror-sync.yml` 每 3 小时用 `git push --mirror` 把 Gitee 的 r
 | 文件 | 触发 | 干什么 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | push 到 `main`、PR、手工 | 编译 + 文档门禁 + 两组纯函数用例（linux-x64），5 分钟内给结论 |
-| `.github/workflows/release.yml` | push tag `v*`、手工 | 三平台现场构建：`ubuntu-22.04` 出 amd64 deb、`ubuntu-22.04-arm` 出 arm64 deb、`windows-latest` 出 zip（有 WiX 时另出 msi），tag 时自动建 Release 并附 `SHA256SUMS` |
+| `.github/workflows/release.yml` | push tag `v*`、手工 | 三平台现场构建：`ubuntu-22.04` 出 amd64 deb、`ubuntu-22.04-arm` 出 arm64 deb、`windows-latest` 出 zip + msi，tag 时自动建 Release 并附 `SHA256SUMS`。v1.0.0 实测：91 MB / 89 MB / zip 96 MB + msi 96 MB |
 | `.github/workflows/mirror-sync.yml` | 每 3 小时、手工 | Gitee → GitHub 单向镜像 refs |
 
 手工触发 `release.yml` 只构建、不发布，用来在打 tag 前先验一遍三平台。
