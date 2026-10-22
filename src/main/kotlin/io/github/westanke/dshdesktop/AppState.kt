@@ -20,6 +20,7 @@ import io.github.westanke.dshdesktop.data.HistoryPage
 import io.github.westanke.dshdesktop.data.JobView
 import io.github.westanke.dshdesktop.data.ModelSelection
 import io.github.westanke.dshdesktop.data.ModelCatalog
+import io.github.westanke.dshdesktop.data.mergeDeliverableCards
 import io.github.westanke.dshdesktop.data.PendingApproval
 import io.github.westanke.dshdesktop.data.PendingAttachment
 import io.github.westanke.dshdesktop.data.PermissionCatalog
@@ -139,6 +140,21 @@ class AppState(
      */
     var todosShelfOpen by mutableStateOf(false)
     var traceShelfOpen by mutableStateOf(false)
+
+    // ── 文件页的版面 ───────────────────────────────────────────────────────
+    // 左（目录）/ 右（内容）两栏。从会话里的文件卡跳过来时默认收起目录栏：
+    // 那一刻的意图是"看这个文件"，不是"在这个目录里找东西"，目录只会把内容挤窄。
+
+    /** 是否显示左侧目录栏。页头那个按钮随时能切回来。 */
+    var filesShowList by mutableStateOf(true)
+
+    /**
+     * 目录栏占文件页宽度的比例（0.18 ~ 0.72）。分隔条可以左右拖。
+     *
+     * 用比例而不是固定 dp：窗口从 1280 拉到 1920 时，两栏该一起变宽，
+     * 而不是"左边固定 340、右边吃掉全部"。
+     */
+    var filesSplitRatio by mutableStateOf(0.34f)
 
     /**
      * 这个会话历次端出来的**产出文件**，与消息流分开存。
@@ -544,6 +560,7 @@ class AppState(
                     historyHasMore = page.hasMore
                     oldestSeq = page.oldest
                     sessionDeliverables = deliverablesIn(page.rawEvents)
+                    mergeScannedDeliverables()
                     applyProjections(sessionId, page)
                     // 首页只是"最近一段"，早期交付物不在这儿；后台往回翻几页把它们捞回来。
                     if (page.hasMore && page.oldest != null) scanDeliverables(sessionId, page.oldest!!)
@@ -583,6 +600,10 @@ class AppState(
                     chatItems = page.items.filterNot { it.id in existing } + chatItems
                     historyHasMore = page.hasMore
                     oldestSeq = page.oldest ?: before
+                    // 这一页里可能有真正的产出卡：补出来的那张要让位，由它顶上
+                    sessionDeliverables =
+                        (deliverablesIn(page.rawEvents) + sessionDeliverables).distinctBy { it.path }
+                    mergeScannedDeliverables()
                 }
             }.onFailure { showToast(human(it)) }
             loadingOlder = false
@@ -590,17 +611,14 @@ class AppState(
     }
 
     /**
-     * 会话级产出里、**当前消息流没画到的**那些。
+     * 把**回溯捞到的产出文件放回它们产出的位置**（算法在 [mergeDeliverableCards]）。
      *
-     * 首页里就有交付物事件时，消息流自己会画卡片，这里再画一遍就是两张一样的卡。
-     * 只有落在更早页（要回溯才捞得到）的部分才需要这块汇总区补上。
+     * 每次 `sessionDeliverables` 或 `chatItems` 变动后都要跑一遍：
+     * 首页加载、后台回溯回来、用户翻到更早一页、实时流推来新交付物。
+     * 幂等 —— 补进去的卡带 `fromScan` 标记，下一趟先撤再插，不会越插越多。
      */
-    fun deliverablesOutsideStream(): List<DeliverableFile> {
-        val inStream = chatItems
-            .filterIsInstance<ChatItem.Deliverable>()
-            .flatMap { it.files }
-            .mapTo(HashSet()) { it.path }
-        return sessionDeliverables.filterNot { it.path in inStream }
+    private fun mergeScannedDeliverables() {
+        chatItems = mergeDeliverableCards(chatItems, sessionDeliverables)
     }
 
     /**
@@ -632,6 +650,7 @@ class AppState(
             }.onSuccess { found ->
                 if (selectedSessionId == sessionId) {
                     sessionDeliverables = found.distinctBy { it.path }
+                    mergeScannedDeliverables()
                 }
             }
         }
@@ -848,10 +867,13 @@ class AppState(
             // "新交付物要等下一次刷新才出现"。
             "chat.deliverables.presented", "deliverables/presented" -> {
                 val sessionId = data.str("sessionId") ?: selectedSessionId ?: return
-                val files = deliverableFiles(data)
+                // 实时事件自己的 seq 就是它的位置；给 0 的（没带 seq）会挂在末尾
+                val seq = (data["seq"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+                val files = deliverableFiles(data, seq)
                 if (files.isEmpty()) return
                 if (sessionId == selectedSessionId) {
                     sessionDeliverables = (files + sessionDeliverables).distinctBy { it.path }
+                    mergeScannedDeliverables()
                 }
             }
 

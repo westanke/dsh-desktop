@@ -5,6 +5,45 @@
 
 ---
 
+## v1.0.0 第十四轮 · 产出文件归位、文件页分栏可拖（2026-10-22）
+
+### 基于什么
+
+用户两句：“没必要一直显示更早轮次产生的文件，他在那就产出就放哪里”
+“文件卡打开文件直接显示文件，没必要显示目录，且目录与文件的显示无法左右调整，
+显示内容多的时候查看不方便”。
+
+上一轮把卡片挂成会话末尾一块汇总区，是把**成果和产出它的那一轮拆开**——
+文件卡永远堆在最下面，看的人不知道它是哪一轮产出的。这一轮改回"哪儿产出放哪儿"。
+
+### 干了什么
+
+- `DeliverableFile` 带 `seq`；`ChatItem.Deliverable` 加 `fromScan`。
+- 新增 `ChatHistory.mergeDeliverableCards()`（纯函数，可单独验证）：只插入不重排，
+  按 seq 插到第一个比它晚的条目之前；去重按 path；补的卡能被原装卡顶掉；缺 seq 挂末尾。
+- `AppState` 四处调用（首页 / 回溯 / 翻更早页 / 实时流），幂等；
+  顺带补上 `loadOlderHistory` 漏掉的"把该页交付物并入 `sessionDeliverables`"。
+- `ui/ChatScreen.kt` 删掉汇总区，`deliverablesOutsideStream()` 删除。
+- `ui/FilesScreen.kt`：`Splitter()` 可左右拖（拖比例 0.18~0.72，不是像素），
+  右栏不再钉死 430dp；页头加目录栏开关；`openFileByPath` 进来时收起目录栏，
+  收起时预览区补一行路径。
+- 交系统打开的那份也先 `previewEntry()`，否则预览区会停在上一个文件上。
+
+### 测了什么
+
+- 编译 0 error；`tools/docs-check.sh` **29/29**。
+- `mergeDeliverableCards` 临时跑了 8 个用例全过（按 seq 归位 / 不重复 / 原装顶掉补的 /
+  幂等 / 多个各归各位 / 同轮合成一张 / 缺 seq 挂末尾 / 不留孤儿卡）。
+
+### 踩到的
+
+- `JsonPrimitive.intOrNull` 要单独 import（`kotlinx.serialization.json.intOrNull`），
+  `AppState` 里没引；用 `contentOrNull?.toIntOrNull()` 绕开。
+- 扩展函数/顶层函数跨包调用要**显式 import**（`mergeDeliverableCards` 在 `data` 包），
+  这已经是第二次栽在同一个地方。
+
+---
+
 ## v1.0.0 第十三轮 · 文件卡片点击直接打开文件（2026-10-22）
 
 ### 基于什么

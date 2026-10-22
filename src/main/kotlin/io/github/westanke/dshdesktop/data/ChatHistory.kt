@@ -109,15 +109,29 @@ sealed interface ChatItem {
      * 实时流被桥接规范化成 `chat.deliverables.presented`。只认其中一个，
      * 另一条路就整条断掉（表现：刚跑完有卡片、下次打开会话就没了）。
      */
+    /**
+     * @param fromScan 这张卡是**回溯补出来**的（不在当前已加载的历史页里，由后台往回翻捞到）。
+     *   标记出来是为了让"真翻到那一页"时能把它换成原装的，不留两张一样的卡。
+     */
     data class Deliverable(
         override val id: String,
         override val seq: Int,
         val files: List<DeliverableFile>,
+        val fromScan: Boolean = false,
     ) : ChatItem
 }
 
-/** 一个产出文件。[path] 是服务端侧的绝对路径，[description] 是模型自己写的一句话。 */
-data class DeliverableFile(val path: String, val description: String? = null) {
+/**
+ * 一个产出文件。[path] 是服务端侧的绝对路径，[description] 是模型自己写的一句话。
+ *
+ * @param seq 它是在哪条事件上端出来的。**卡片要放回这个位置**，而不是统一挂到会话末尾
+ *   ——产出文件是那一轮的成果，离了那一轮就不知道为什么会有它。
+ */
+data class DeliverableFile(
+    val path: String,
+    val description: String? = null,
+    val seq: Int = 0,
+) {
     val name: String get() = path.substringAfterLast('/').ifBlank { path }
     val directory: String get() = path.substringBeforeLast('/', "")
 }
@@ -250,12 +264,12 @@ const val DELIVERABLE_EVENT_REALTIME = "chat.deliverables.presented"
 fun isDeliverableEvent(type: String?): Boolean =
     type == DELIVERABLE_EVENT || type == DELIVERABLE_EVENT_REALTIME
 
-/** 从事件 data 里读 `files[]`；形状不对返回空表，不猜。 */
-fun deliverableFiles(data: JsonObject?): List<DeliverableFile> =
+/** 从事件 data 里读 `files[]`；形状不对返回空表，不猜。[seq] 是这条事件的序号，用来定位卡片。 */
+fun deliverableFiles(data: JsonObject?, seq: Int = 0): List<DeliverableFile> =
     ((data?.get("files") as? JsonArray) ?: JsonArray(emptyList())).mapNotNull { raw ->
         val value = raw as? JsonObject ?: return@mapNotNull null
         val path = value.str("path")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-        DeliverableFile(path, value.str("description"))
+        DeliverableFile(path, value.str("description"), seq)
     }
 
 /**
@@ -271,9 +285,54 @@ fun deliverablesIn(events: List<JsonElement>): List<DeliverableFile> {
     for (element in events) {
         val event = unwrapEvent(element) ?: continue
         if (!isDeliverableEvent(event.str("type"))) continue
-        out += deliverableFiles(event.obj("data"))
+        out += deliverableFiles(event.obj("data"), event.int("seq") ?: 0)
     }
     return out
+}
+
+/**
+ * 把**回溯捞到的产出文件卡片插回消息流**：它在哪一轮产出，就排在哪一轮后面。
+ *
+ * 为什么不另外挂一块「更早轮次的产出文件」汇总区：那样文件卡永远堆在会话最末尾，
+ * 既看不出是哪一轮的产出，也和当时说了什么脱节。产出文件是那一轮的成果，
+ * 就该待在那一轮旁边。
+ *
+ * 三条纪律：
+ * - **只插入，不重排**：消息流其余项保持原顺序，注入项按 seq 找到第一个比它晚的位置插进去；
+ * - **去重按 path**：消息流里已经有了（首页就带着，或用户翻到了那一页）就不再插；
+ * - **能换回原装**：[ChatItem.Deliverable.fromScan] 标出补出来的卡，真翻到那一页时
+ *   原装卡进来、补的这张撤掉，不会留两张一模一样的。
+ *
+ * 纯函数（不碰状态、不碰网络），`tools/` 下的验证程序可以直接编译它跑用例。
+ *
+ * @param items 当前消息流（可能已含上一轮补进去的卡）
+ * @param all 这个会话已知的产出文件（含[seq]，来自首页事件与后台回溯）
+ */
+fun mergeDeliverableCards(items: List<ChatItem>, all: List<DeliverableFile>): List<ChatItem> {
+    // 先剔掉上一轮补的卡，再算"还缺哪些"：否则跑过一次就再也撤不掉
+    val base = items.filterNot { it is ChatItem.Deliverable && it.fromScan }
+    val inStream = base
+        .filterIsInstance<ChatItem.Deliverable>()
+        .flatMap { it.files }
+        .mapTo(HashSet()) { it.path }
+    // seq 缺失（实时事件偶尔不带）没法定位，统一挂末尾：插到最前面比挂末尾更离谱
+    val missing = all
+        .filter { it.path !in inStream }
+        .groupBy { if (it.seq > 0) it.seq else Int.MAX_VALUE }
+    if (missing.isEmpty()) return if (base.size == items.size) items else base
+
+    val injected = missing.keys.sorted().map { seq ->
+        ChatItem.Deliverable("$seq-deliverable", seq, missing[seq]!!, fromScan = true)
+    }
+    // 归并插入：base 与 injected 都按 seq 升序，一趟走完
+    val merged = ArrayList<ChatItem>(base.size + injected.size)
+    var i = 0
+    for (item in base) {
+        while (i < injected.size && injected[i].seq < item.seq) merged += injected[i++]
+        merged += item
+    }
+    while (i < injected.size) merged += injected[i++]
+    return merged
 }
 
 fun parseHistoryOldestSeq(events: List<JsonElement>): Int? =
@@ -372,7 +431,7 @@ fun parseHistory(events: List<JsonElement>): List<ChatItem> {
             }
 
             DELIVERABLE_EVENT, DELIVERABLE_EVENT_REALTIME -> {
-                val files = deliverableFiles(data)
+                val files = deliverableFiles(data, seq)
                 if (files.isNotEmpty()) {
                     items += ChatItem.Deliverable("$seq-deliverable", seq, files)
                 }

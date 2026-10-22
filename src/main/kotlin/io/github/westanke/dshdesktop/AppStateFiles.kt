@@ -347,6 +347,8 @@ fun AppState.openFileByPath(absolutePath: String) {
         }
         val (resolved, parent, page) = prepared
         nav = Nav.Files
+        // 点文件卡要的是"看这个文件"：目录栏收起来，版面全给内容
+        filesShowList = false
         activeRootId = resolved.rootId
         currentPage = page
         currentPath = page.path
@@ -369,8 +371,15 @@ fun AppState.openFileByPath(absolutePath: String) {
             FileKind.Other -> false
         }
         // 仍然停在文件页：外呼失败的话（openEntryExternally 只写 filesError），
-        // 这里还能看到"打不开"的原因，以及"用系统程序打开 / 下载"两个按钮
-        if (inline) previewEntry(entry) else openEntryExternally(entry)
+        // 这里还能看到"打不开"的原因，以及"用系统程序打开 / 下载"两个按钮。
+        // 交系统的那份也先 previewEntry：把预览区指向它（显示"这类不内嵌渲染"），
+        // 否则目录栏收起后预览区还停在上一个文件上，看着像点错了。
+        if (inline) {
+            previewEntry(entry)
+        } else {
+            previewEntry(entry)
+            openEntryExternally(entry)
+        }
     }
 }
 

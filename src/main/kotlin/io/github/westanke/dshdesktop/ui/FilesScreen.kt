@@ -21,7 +21,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
@@ -81,6 +87,7 @@ import io.github.westanke.dshdesktop.data.classifyFile
 import io.github.westanke.dshdesktop.data.formatFileSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.awt.Cursor
 import java.io.File
 import javax.swing.JFileChooser
 
@@ -106,6 +113,18 @@ fun FilesScreen(state: AppState) {
                 "${it.label} · /${state.currentPath.trimStart('/')}".trimEnd('/')
             } ?: "未获得任何文件根授权",
         ) {
+            // 目录栏开关：从文件卡跳过来时它是收起的，想回目录里翻就点这里
+            IconButton(
+                onClick = { state.filesShowList = !state.filesShowList },
+                modifier = Modifier.size(30.dp),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.List,
+                    if (state.filesShowList) "收起目录" else "显示目录",
+                    tint = if (state.filesShowList) MaterialTheme.colorScheme.primary else colors.textSecondary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
             IconButton(onClick = { state.refreshDirectory() }, modifier = Modifier.size(30.dp)) {
                 Icon(Icons.Filled.Refresh, "刷新", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
             }
@@ -150,10 +169,24 @@ fun FilesScreen(state: AppState) {
         RootChips(state)
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
 
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            FileListPane(state, Modifier.weight(1f))
-            Box(Modifier.fillMaxHeight().width(1.dp).background(colors.hairline))
-            PreviewPane(state)
+        // 左目录 / 右内容两栏，中间一条**能拖**的分隔条。
+        // 以前右边钉死 430dp：窗口一宽就左宽右窄，长表格和宽代码看不全，
+        // 而"左右调不动"正是长内容最难熬的地方。
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val totalPx = with(LocalDensity.current) { maxWidth.toPx() }.takeIf { it > 0f }
+            Row(Modifier.fillMaxSize()) {
+                if (state.filesShowList) {
+                    FileListPane(state, Modifier.weight(state.filesSplitRatio))
+                    Splitter(
+                        onDrag = { dxPx ->
+                            val total = totalPx ?: return@Splitter
+                            state.filesSplitRatio =
+                                (state.filesSplitRatio + dxPx / total).coerceIn(0.18f, 0.72f)
+                        },
+                    )
+                }
+                PreviewPane(state, Modifier.weight(1f))
+            }
         }
     }
 
@@ -179,6 +212,39 @@ fun FilesScreen(state: AppState) {
                 ) { Text("创建") }
             },
             dismissButton = { TextButton(onClick = { showNewDialog = false }) { Text("取消") } },
+        )
+    }
+}
+
+/**
+ * 左右两栏之间的可拖动分隔条。
+ *
+ * 拖的是**比例**不是像素：窗口拉宽时两栏一起变宽，比例保持，不用重新调。
+ * 上下限卡在 0.18 / 0.72 —— 拖到 0 会让目录栏消失后拉不回来，拖到 1 则反过来看不见内容。
+ */
+@Composable
+private fun Splitter(onDrag: (Float) -> Unit) {
+    val colors = LocalAppColors.current
+    var dragging by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(10.dp)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { dragging = true },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                ) { _, amount -> onDrag(amount.x) }
+            }
+            .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .width(if (dragging) 2.dp else 1.dp)
+                .background(if (dragging) MaterialTheme.colorScheme.primary else colors.hairline),
         )
     }
 }
@@ -338,7 +404,7 @@ private fun FileRow(entry: FileEntry, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PreviewPane(state: AppState) {
+private fun PreviewPane(state: AppState, modifier: Modifier = Modifier) {
     val colors = LocalAppColors.current
     val entry = state.selectedEntry
     var moveOpen by remember { mutableStateOf(false) }
@@ -349,13 +415,22 @@ private fun PreviewPane(state: AppState) {
     val kind = type?.kind
 
     Column(
-        Modifier
-            .width(430.dp)
+        modifier
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surface),
     ) {
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 12.dp)) {
             ElidedText(entry?.name ?: "预览", style = MaterialTheme.typography.titleSmall)
+            // 目录栏收起时，路径是唯一能说明"我在看哪个文件"的线索，不能省
+            if (entry != null && !state.filesShowList) {
+                Text(
+                    "/" + entry.path.trimStart('/').substringBeforeLast('/', ""),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (entry != null && entry.kind != "directory") {
                 Row(
                     Modifier.padding(top = 5.dp),
