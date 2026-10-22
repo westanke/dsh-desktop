@@ -282,9 +282,24 @@ GitHub 的 `mirror-sync.yml` 每 3 小时用 `git push --mirror` 把 Gitee 的 r
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | push 到 `main`、PR、手工 | 编译 + 文档门禁 + 两组纯函数用例（linux-x64），5 分钟内给结论 |
 | `.github/workflows/release.yml` | push tag `v*`、手工 | 三平台现场构建：`ubuntu-22.04` 出 amd64 deb、`ubuntu-22.04-arm` 出 arm64 deb、`windows-latest` 出 zip + msi，tag 时自动建 Release 并附 `SHA256SUMS`。v1.0.0 实测：91 MB / 89 MB / zip 96 MB + msi 96 MB |
-| `.github/workflows/mirror-sync.yml` | 每 3 小时、手工 | Gitee → GitHub 单向镜像 refs |
+| `.github/workflows/mirror-sync.yml` | 每 3 小时、手工 | ① Gitee → AtomGit → GitHub 单向镜像 refs；② 把 GitHub 最新 Release 搬成 Gitee 发行版 |
 
 手工触发 `release.yml` 只构建、不发布，用来在打 tag 前先验一遍三平台。
+
+### 10.2.1 主源上的下载页
+
+产物由 GitHub 的机器构建，Release 长在 GitHub 上；而 `push --mirror` **只搬 refs、不搬 Release**。
+不做处理的话，国内用户打开 Gitee 仓库会看到"代码齐全、没有可下载的东西"。
+所以 Release 有一条反方向的同步路径：
+
+```bash
+# 发版当场：release.yml 的 publish job 拿到三平台产物后立刻搬回 Gitee
+python3 scripts/ci/sync-release-to-gitee.py --tag "$TAG" --local dist
+# 漏了的话：mirror-sync.yml 每 3 小时从 GitHub 拉一份补上
+python3 scripts/ci/sync-release-to-gitee.py --tag v1.0.0
+```
+
+同名附件跳过（幂等），缺 secret `GITEE_TOKEN` 时只警告不判红。
 
 ### 10.3 发版
 

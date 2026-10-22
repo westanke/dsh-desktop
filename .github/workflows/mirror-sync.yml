@@ -66,3 +66,35 @@ jobs:
             echo "::error::镜像推送失败（源：$SRC_LABEL）"
             exit 1
           fi
+
+  # 方向相反的一条：产物是 GitHub 建的，主源 Gitee 上得有得下。
+  # 平时由 release.yml 在发版时当场搬；这里是定时补缺（例如那次没配 GITEE_TOKEN）。
+  releases:
+    needs: mirror              # 先有 refs，才谈得上认 tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: 把 Release 搬到 Gitee
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: westanke/dsh-desktop
+          PYTHONUTF8: '1'
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::warning::未配置 secret GITEE_TOKEN，跳过 Release 同步"
+            exit 0
+          fi
+          TAG="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 \
+                   --json tagName -q '.[0].tagName' 2>/dev/null || true)"
+          if [ -z "$TAG" ]; then
+            echo "还没有 Release，本次跳过"
+            exit 0
+          fi
+          echo "▸ 同步 $TAG 到 Gitee 发行版"
+          python3 scripts/ci/sync-release-to-gitee.py --tag "$TAG"

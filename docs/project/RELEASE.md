@@ -97,6 +97,28 @@ gh run watch --repo westanke/dsh-desktop
 想先验一遍再发版：在 Actions 页手工 `workflow_dispatch` 触发 `release.yml`，
 它只构建、不建 Release，产物留在 run 的 artifact 里。
 
+## ⑥′ Gitee 发行版（主源上不能没东西可下）
+
+`push --mirror` 只搬 refs，**不搬 Release**。产物又是 GitHub 的机器建的，
+于是会出现"Gitee 上代码齐全、下载页空空"的尴尬。所以有一条反方向的路：
+由 `release.yml` 发版当场把产物搬回 Gitee，漏了则由 `mirror-sync.yml` 每 3 小时补。
+
+```sh
+# 补发：把 GitHub 上某个 tag 的 Release 整个搬到 Gitee
+export GITEE_TOKEN=<Gitee 私人令牌>
+python3 scripts/ci/sync-release-to-gitee.py --tag v1.0.0
+
+# 或者直接传本机刚打的产物（不再绕 GitHub 下载一遍）
+python3 scripts/ci/sync-release-to-gitee.py --tag v1.0.0 --local dist --include '*.deb'
+```
+
+搬完自己核一遍（Gitee 的 HEAD 不返回 Content-Length，只能流式取真哈希）：
+
+```sh
+curl -sL https://gitee.com/westanke/dsh-desktop/releases/download/v1.0.0/SHA256SUMS \
+  | sha256sum -c - --ignore-missing   # 或逐个 curl | sha256sum 比对
+```
+
 ## ⑦ 交付清单
 
 给用户时说清三件事，别只说"修好了"：

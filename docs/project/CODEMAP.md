@@ -86,19 +86,21 @@
 | `tools/linux/postinst-shortcut.sh` | 安装后给用户桌面临一份 | 拼接进 deb 的 postinst |
 | `tools/linux/postrm-shortcut.sh` | 卸载时清理桌面副本 | 拼接进 deb 的 postrm |
 | `tools/fetch-deps.py` | 按 Maven 坐标补传递依赖（`lib/` 的整理脚本） | 写入 `lib/` |
-| `tools/mock-server.py` | 离线服务端，端口 3091 | 本地 HTTP 服务 |
+| `tools/mock-server.py` | 离线服务端，端口 **3091**（别抢 3090） | 本地 mock 数据 |
+| `tools/portable/run.sh` | 便携包启动脚本 | 打进 tar.gz 根目录 |
+| `build-windows.bat` | Windows 入口：`bash tools/fetch-platform.sh windows-x64` + `bash tools/package.sh` | `dist/dsh-desktop-<ver>-windows-x64.zip`（有 WiX 时另出 msi） |
+| `scripts/ci/sync-release-to-gitee.py` | 把 GitHub Release 单向搬成 Gitee 发行版（含附件）；`--local` 模式直接传本机产物并自算 `SHA256SUMS` | 建/补 Gitee 发行版；重跑幂等 |
 
 ### A.4 CI 与发布（`.github/workflows/`）
 
 | 文件 | 触发 | 干什么 | 关键约束 |
 | --- | --- | --- | --- |
 | `ci.yml` | push `main`、PR、手工 | 编译 + `docs-check` + `verify-files` + `verify-markdown`（linux-x64） | **不产安装包**，必须快；红了不许合并 |
-| `release.yml` | push tag `v*`、手工 | `linux-amd64`（ubuntu-22.04）、`linux-arm64`（ubuntu-22.04-arm）、`windows-x64`（windows-latest）三 job 现场构建，tag 时建 Release + `SHA256SUMS` | 手工触发只构建不发布；arm64 必须断言包里带 arm64 skiko |
-| `mirror-sync.yml` | 每 3 小时、手工 | Gitee（主）→ AtomGit（备）→ GitHub（从）单向 `push --mirror` refs | 用 secret `MIRROR_PAT`，不能用 `github.token`；判据是退出码 |
-| `tools/mock-server.py` | 离线服务端（端口 **3091**，别抢 3090） | 本地 mock 数据 |
-| `tools/portable/run.sh` | 便携包启动脚本 | 打进 tar.gz 根目录 |
-| `tools/fetch-deps.py` | 按坐标补 Maven 传递依赖 | `lib/` |
-| `build-windows.bat` | Windows 入口：`bash tools/fetch-platform.sh windows-x64` + `bash tools/package.sh` | `dist/dsh-desktop-<ver>-windows-x64.zip`（有 WiX 时另出 msi） |
+| `release.yml` | push tag `v*`、手工 | 三 job 现场构建（amd64 / arm64 / windows-x64），tag 时建 Release + `SHA256SUMS`，再用 `sync-release-to-gitee.py --local dist` 把产物搬回 Gitee | 手工触发只构建不发布；arm64 必须断言包里带 arm64 skiko；Gitee 搬不动只警告不判红（tag 可能还没镜像过去） |
+| `mirror-sync.yml` | 每 3 小时、手工 | `mirror` job：Gitee（主）→ AtomGit（备）→ GitHub（从）单向 `push --mirror` refs；`releases` job：把 GitHub 最新 Release 搬到 Gitee 发行版（定时补缺） | refs 与 Release 是两码事——`push --mirror` **不搬 Release**，所以必须有第二个 job；用 secret `MIRROR_PAT`，不能用 `github.token`；判据是退出码 |
+
+> 需要的 secret：`MIRROR_PAT`（repo + workflow scope，推 refs 用）、`GITEE_TOKEN`（Gitee 私人令牌，建发行版与传附件用）。
+> 缺 `GITEE_TOKEN` 时两个工作流都只警告跳过，不会红。
 
 > 开发机上还有两个不入库的下载种子目录：Windows 原生库的历史落点、以及按平台拉取的
 > 平台库目录。文档里引用路径时用 `git ls-files` 判存在——按"本地在不在"判会外绿内红。

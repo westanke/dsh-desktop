@@ -591,3 +591,66 @@ export PYTHONIOENCODING=utf-8
 不能指望控制台是 UTF-8。
 
 **防回归**：脚本里出现中文提示时，先确认这两行已经 export；**工作流里内联的 python 同样要设**（在 step 上加 env: PYTHONUTF8）——构建脚本 export 的变量不会传给后面单独起的一步，我在校验步骤上就这样二次踩过。
+
+---
+
+### Gitee 附件字段名是 file，文档写的 file[] 是错的
+
+**现象**：按 Gitee OpenAPI 文档 `POST /v5/repos/{owner}/{repo}/releases/{id}/attach_files`
+传附件，字段名用 `file[]`，不管 6 B 的文本还是 90 MB 的 deb，一律
+`400 {"messages":["file is invalid"]}`。换 curl 重试也照样 400，
+很容易误判成"附件超了 Gitee 的大小限制"。
+
+**根因**：文档写 `file[]`，服务端只认 `file`。附件里还有个干扰项——
+Gitee 会自动往发行版里塞 `v1.0.0.zip` / `v1.0.0.tar.gz` 两个源码包，
+它们的 `assets` 条目不带 `id`，所以列出来时别当成用户附件去删。
+
+**修法**：
+
+```bash
+curl -X POST ".../attach_files" -F "access_token=$TOKEN" -F "file=@dist/xxx.deb"
+```
+
+**防回归**：鉴别方法是拿一个几 KB 的 `hello.txt` 试——它要是也 400，
+就一定是字段名/权限问题，不是体积问题。
+
+---
+
+### Gitee API 的 POST 不带 Content-Type 一律 400
+
+**现象**：同一个建发行版的调用，`curl -d` 成功，`urllib` 用
+`urlencode` 拼好表单体却得到 `400 Bad Request`，响应体里没有任何有效提示。
+
+**根因**：`curl -d` 默认带 `Content-Type: application/x-www-form-urlencoded`，
+而 `urllib.request.Request(data=...)` 不会自动补。Gitee 收到没有 Content-Type 的
+POST 直接拒。
+
+**修法**：POST/PATCH 时显式带上，GET 则把 `access_token` 拼进 query：
+
+```python
+headers = {"Accept": "application/json",
+           "Content-Type": "application/x-www-form-urlencoded"}
+```
+
+**防回归**：另外注意 `PATCH /releases/{id}` **必须带 `tag_name`**（哪怕不改标签），
+否则回 `400 {"messages":["tag_name is missing"]}`。
+还有一点：给 `Request` 传了 `data` 但不传 `method`，urllib 会当成 POST——
+想发 GET 就把参数拼到 URL 上，别塞进 data。
+
+---
+
+### push --mirror 搬不了 Release
+
+**现象**：Gitee 是主源，refs 每 3 小时镜像到 GitHub，一切正常；
+但打开 Gitee 仓库的发行版页，一个都没有。
+
+**根因**：`--mirror` 只搬 refs。而安装包是 GitHub Actions 现场构建的，
+Release 天然长在 GitHub 上——主源上自然就是空的。
+
+**修法**：反方向再搬一次，见 `scripts/ci/sync-release-to-gitee.py`；
+`release.yml` 发版当场搬（用 `--local` 直接传刚构建好的产物），
+`mirror-sync.yml` 定时补缺（从 GitHub 拉）。
+
+**防回归**：同一个 tag 的发行版附件按名字去重即可幂等——Gitee 没有
+"覆盖同名附件"的接口（删除需要 attachment id，而发行版详情不返回 id），
+所以新版本一定要发新 tag。

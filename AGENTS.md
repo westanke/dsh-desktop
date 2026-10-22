@@ -269,6 +269,9 @@ JUnit + Gradle 那套无处安放。这是 `TECH-DEBT.md` 的 **DEBT-001**，不
 - `lib 里的 skiko 运行时必须按平台剔除`
 - `GITHUB_TOKEN 改不了 workflow 文件`
 - `Windows 上 Python 打印中文会 UnicodeEncodeError`
+- `Gitee 附件字段名是 file，文档写的 file[] 是错的`
+- `Gitee API 的 POST 不带 Content-Type 一律 400`
+- `push --mirror 搬不了 Release`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 > `tools/docs-check.sh` 会检查两边是否一一对应。

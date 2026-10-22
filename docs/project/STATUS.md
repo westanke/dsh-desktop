@@ -1,8 +1,39 @@
 # 状态（STATUS）
 
 - 日期：**2026-10-22**
-- 版本：**1.0.0**（`v1.0.0` tag 已发，Release 由 GitHub 现场构建并产出三平台产物）
+- 版本：**1.0.0**（`v1.0.0` tag 已发；Release 由 GitHub 现场构建，产物已**同步回 Gitee 主源**）
 - 平台：UOS / Deepin x64 与 arm64（deb）、Windows x64（zip + msi）
+
+---
+
+## v1.0.0 第十一轮 · 把发行版搬回主源（2026-10-22）
+
+**基于什么**：用户一句「gitee 没有发行版，应该同步 GitHub 的发现版，本地 deb 自己没打」。
+前者是设计缺口（`--mirror` 只搬 refs，产物长在 GitHub 上），后者是我自己欠的账——
+`package.sh` 重写后本机再没打过包。
+
+**干了什么**
+
+1. 本机前台一次跑通 `tools/package.sh`（2m01s）→ `dist/dsh-desktop_1.0.0-1_amd64.deb`（90 MB），
+   桌面入口自检过。
+2. 新增 `scripts/ci/sync-release-to-gitee.py`：把 GitHub Release 单向搬成 Gitee 发行版，
+   支持 `--local`（直接传本机产物并自算 `SHA256SUMS`）、`--include`、`--dry-run`，同名附件跳过。
+3. `release.yml` 发版当场搬回 Gitee（失败只警告不判红——tag 可能还没镜像过去）；
+   `mirror-sync.yml` 新增 `releases` job 每 3 小时补缺。
+4. 配 secret `GITEE_TOKEN`；三个坑位进 `PITFALLS.md`。
+
+**测了什么**
+
+- Gitee 发行版 **0 → 1**，五个资产全在：zip 96 MB / msi 96 MB / amd64 deb 91 MB /
+  arm64 deb 89 MB / SHA256SUMS；全量同步耗时 2m06s。
+- 四个资产流式取真 sha256 与随包 `SHA256SUMS` **4/4 一致**。
+- `tools/docs-check.sh` **28/28**。
+
+**没做的**
+
+- 三个产物**仍未真机安装验证**。
+- Gitee 上放的是 GitHub 构建的那份 deb（与本机那份字节不同，jpackage 烤了时间戳）——
+  刻意如此，否则 Gitee 里的包与随包校验和对不上。
 
 ---
 

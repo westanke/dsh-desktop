@@ -166,6 +166,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -195,3 +199,24 @@ jobs:
               ./*
           fi
           echo "✓ 已发布 $TAG"
+
+      # Gitee 是主源，但产物是这里建的——不搬回去，国内用户打开仓库会看到
+      # "代码齐全、没东西可下"。--local 直接用刚上传的那份，不用再下载一遍。
+      - name: 同步到 Gitee 发行版
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: westanke/dsh-desktop
+          TAG: ${{ github.ref_name }}
+          PYTHONUTF8: '1'
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::warning::未配置 secret GITEE_TOKEN，跳过 Gitee 发行版同步"
+            exit 0
+          fi
+          # 只警告不判红：GitHub 这边 Release 已经发布成功，Gitee 上可能还差这个 tag
+          # （tag 是主源那边打的，要等 mirror-sync 搬过来）。缺了的话定时任务会补上。
+          if ! python3 scripts/ci/sync-release-to-gitee.py --tag "$TAG" --local dist; then
+            echo "::warning::Gitee 发行版同步未成功，将由定时任务补发"
+          fi

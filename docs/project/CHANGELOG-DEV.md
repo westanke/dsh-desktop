@@ -5,6 +5,62 @@
 
 ---
 
+## v1.0.0 第十一轮 · 把发行版搬回主源（2026-10-22）
+
+### 基于什么
+
+用户一句：“gitee 没有发行版，应该同步 GitHub 的发现版，本地 deb 自己没打。”
+
+两个问题，其中第二个是我自己的锅：第九轮把出包交给 CI 之后，**本机再没打过包**——
+`tools/package.sh` 重写后从没在本地跑通过完整流程，等于权威路径只剩 CI 一条。
+第一个才是设计缺口：`--mirror` 只搬 refs，产物是 GitHub 的机器建的，
+于是主源上"代码齐全、下载页空空"。
+
+### 干了什么
+
+**A. 本机把 deb 打出来（先证明这条路还活着）**
+
+前台一次跑通 `tools/package.sh`，2m01s 出 `dist/dsh-desktop_1.0.0-1_amd64.deb`（90 MB），
+包内桌面入口自检通过。刻意没有"边跑边改脚本"——那会读到半行（见坑位）。
+
+**B. `scripts/ci/sync-release-to-gitee.py`（新建）**
+
+把 GitHub Release 单向搬成 Gitee 发行版，两条喂法：
+
+- 默认：从 GitHub 下载该 tag 的资产再上传（CI 上走这条，带宽由 GitHub 出）；
+- `--local DIR`：直接传本机产物，顺手自算 `SHA256SUMS`。
+
+同名附件跳过 → 重跑幂等；缺 `GITEE_TOKEN` 时只警告。
+
+**C. 接进两条工作流**
+
+- `release.yml` 的 `publish` job：拿到三平台产物后当场 `--local dist` 搬回 Gitee；
+  搬不动**只警告不判红**（tag 可能还没镜像到 Gitee，GitHub 那边 Release 已经成了）。
+- `mirror-sync.yml` 新增 `releases` job（`needs: mirror`）：每 3 小时补缺，取最新 Release tag。
+
+### 测了什么
+
+- 本地打包 2m01s 通过，deb `dpkg-deb -I/-c` 自检过（含桌面入口）。
+- 全量同步 2m06s：`zip 96 MB / msi 96 MB / amd64 deb 91 MB / arm64 deb 89 MB / SHA256SUMS`
+  五个资产上传成功，**Gitee 发行版从 0 个变成 1 个**。
+- 完整性核验：把四个资产流式取真 sha256 与随包 `SHA256SUMS` 逐条比对，**4/4 一致**。
+- `tools/docs-check.sh` **28/28**（新增 3 条坑位、CODEMAP 登记新脚本后复跑）。
+
+### 踩到的
+
+1. Gitee 附件字段名是 **`file`**，不是文档写的 `file[]`——后者连 6 B 的文本都 400。
+2. Gitee API 的 POST **必须带 `Content-Type`**，否则一律 400（`curl -d` 会自动带，手测能过、代码过不了）。
+3. `PATCH` 更新发行版**必须带 `tag_name`**。
+4. 本机 `dist/SHA256SUMS` 被我自己拼进了校验和清单 → 改成跳过自己（否则 `sha256sum -c` 必报不匹配）。
+
+### 没做的
+
+- Gitee 上那份 amd64 deb 是 GitHub 构建的（与本机那份字节不同，jpackage 会烤进时间戳）。
+  刻意保持一致：否则 Gitee 里的 deb 与随包 `SHA256SUMS` 对不上，用户校验会失败。
+- 三个产物仍**未真机安装验证**（沙箱只读 `/usr/share`、`/var/log`）。
+
+---
+
 ## v1.0.0 第十轮 · 对齐官方 Web 的会话观感（2026-10-22）
 
 ### 基于什么
