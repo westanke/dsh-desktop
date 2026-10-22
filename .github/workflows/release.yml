@@ -1,9 +1,12 @@
 name: 打安装包
 
-# 在 GitHub 的机器上现场构建三份产物，不依赖任何本机环境：
-#   · Linux amd64 → deb
-#   · Linux arm64 → deb（arm64 机器上原生构建，交叉编译 jpackage 不可行）
-#   · Windows x64 → 免安装 zip（镜像里有 WiX 时另出 msi）
+# 在 GitHub 的机器上现场构建产物，不依赖任何本机环境。每个平台出**两份**：
+#   · 完整包（自带运行时，离线可用）          dsh-desktop_<ver>_amd64.deb / …-windows-x64.zip
+#   · 轻量包（不含 50 MB 运行时，首次启动下载） dsh-desktop-lite_<ver>_amd64.deb / …-windows-x64-lite.zip
+# 外加各平台的**运行时压缩包**（轻量包第一次启动时拉它）：
+#   dsh-desktop-runtime-<ver>-<平台>.tar.xz + .sha256
+# 为什么要两份：轻量包把安装体积砍掉四成，但对"完全离线 / 内网"的用户是灾难；
+# 完整包留着，两种用户各取所需。下载源国内优先 Gitee（release 会同步过去）。
 #
 # 触发：
 #   · push tag v*  → 构建 + 建 GitHub Release 并上传资产
@@ -41,8 +44,14 @@ jobs:
       - name: 准备平台运行时（skiko linux-x64）
         run: bash tools/fetch-platform.sh linux-x64
 
-      - name: 编译并打 deb
+      - name: 编译并打 deb（完整包）
         run: bash tools/package.sh
+
+      - name: 打轻量 deb + 运行时压缩包
+        run: |
+          set -euo pipefail
+          LITE=1 bash tools/package.sh
+          bash tools/build-runtime.sh
 
       - name: 校验
         run: |
@@ -51,14 +60,25 @@ jobs:
           # 注意：不要 `dpkg-deb -c … | grep -q`，grep 命中即关闭管道，
           # 上游 tar 收到 EPIPE 会报 "tar: stdout: write error" 并让整条流水线判红。
           dpkg-deb -I dist/*.deb
-          contents="$(dpkg-deb -c dist/*.deb)"
+          contents="$(dpkg-deb -c dist/dsh-desktop_*.deb)"
           grep -q 'usr/share/applications/dsh-desktop.desktop' <<< "$contents"
           echo "✓ 包内桌面入口就位"
+          # 轻量包三件事：不带 runtime、bin/dsh-desktop 是引导器脚本、带了运行时校验和
+          lite_contents="$(dpkg-deb -c dist/dsh-desktop-lite_*.deb)"
+          ! grep -q 'lib/runtime/bin/java' <<< "$lite_contents"
+          grep -q 'VERSION' <<< "$lite_contents"
+          grep -q 'dsh-desktop-runtime-.*\.sha256' <<< "$lite_contents"
+          test -f dist/dsh-desktop-runtime-*-linux-x64.tar.xz
+          # 引导器解压后期望 bin/java 就在根下（不多套一层目录）
+          tar -tJf dist/dsh-desktop-runtime-*-linux-x64.tar.xz | grep -qx './bin/java'
+          echo "✓ 轻量包与运行时资产就位"
 
       - uses: actions/upload-artifact@v4
         with:
           name: deb-amd64
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/dsh-desktop-runtime-*
           if-no-files-found: error
 
   # ── Linux arm64 ────────────────────────────────────────────────────────
@@ -83,27 +103,42 @@ jobs:
         # lib/ 里入库的只有 x64 那份，arm64 必须现场拉
         run: bash tools/fetch-platform.sh linux-arm64
 
-      - name: 编译并打 deb
+      - name: 编译并打 deb（完整包）
         env:
           TARGET_PLATFORM: linux-arm64
         run: bash tools/package.sh
+
+      - name: 打轻量 deb + 运行时压缩包
+        env:
+          TARGET_PLATFORM: linux-arm64
+        run: |
+          set -euo pipefail
+          LITE=1 bash tools/package.sh
+          bash tools/build-runtime.sh
 
       - name: 校验
         run: |
           set -euo pipefail
           ls -lh dist/
           # 同上：先整体取回再判断，避免 grep -q 提前关管道把 dpkg-deb 打成失败
-          info="$(dpkg-deb -I dist/*.deb)"
-          contents="$(dpkg-deb -c dist/*.deb)"
+          info="$(dpkg-deb -I dist/dsh-desktop_*.deb)"
+          contents="$(dpkg-deb -c dist/dsh-desktop_*.deb)"
           grep -q 'Architecture: arm64' <<< "$info"
           grep -q 'skiko-awt-runtime-linux-arm64' <<< "$contents"
           grep -q 'usr/share/applications/dsh-desktop.desktop' <<< "$contents"
           echo "✓ 架构与桌面入口都对"
+          lite_contents="$(dpkg-deb -c dist/dsh-desktop-lite_*.deb)"
+          ! grep -q 'lib/runtime/bin/java' <<< "$lite_contents"
+          test -f dist/dsh-desktop-runtime-*-linux-arm64.tar.xz
+          tar -tJf dist/dsh-desktop-runtime-*-linux-arm64.tar.xz | grep -qx './bin/java'
+          echo "✓ 轻量包与运行时资产就位"
 
       - uses: actions/upload-artifact@v4
         with:
           name: deb-arm64
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/dsh-desktop-runtime-*
           if-no-files-found: error
 
   # ── Windows x64 ────────────────────────────────────────────────────────
@@ -126,9 +161,16 @@ jobs:
         shell: bash
         run: bash tools/fetch-platform.sh windows-x64
 
-      - name: 编译并打包
+      - name: 编译并打包（完整包）
         shell: bash
         run: bash tools/package.sh
+
+      - name: 打轻量 zip + 运行时压缩包
+        shell: bash
+        run: |
+          set -euo pipefail
+          LITE=1 bash tools/package.sh
+          bash tools/build-runtime.sh
 
       - name: 校验
         shell: bash
@@ -141,13 +183,21 @@ jobs:
           set -euo pipefail
           ls -lh dist/
           python - <<'PY'
-          import glob, zipfile, sys
-          hits = glob.glob("dist/dsh-desktop-*-windows-x64.zip")
-          if not hits:
-              sys.exit("✗ 没找到 Windows zip")
-          names = zipfile.ZipFile(hits[0]).namelist()
-          assert any(n.endswith("dsh-desktop.exe") for n in names), "zip 里没有主程序"
-          print("✓ zip 里有主程序")
+          import glob, sys, zipfile, tarfile
+          full = glob.glob("dist/dsh-desktop-*-windows-x64.zip")
+          lite = glob.glob("dist/dsh-desktop-*-windows-x64-lite.zip")
+          rt = glob.glob("dist/dsh-desktop-runtime-*-windows-x64.tar.xz")
+          assert full, "没找到 Windows zip"
+          assert lite, "没找到 Windows 轻量 zip"
+          assert rt, "没找到 Windows 运行时压缩包"
+          names = zipfile.ZipFile(full[0]).namelist()
+          assert any(n.endswith("dsh-desktop.exe") for n in names), "完整 zip 里没有主程序"
+          lite_names = zipfile.ZipFile(lite[0]).namelist()
+          assert any(n.endswith("dsh-desktop.bat") for n in lite_names), "轻量 zip 里没有 bat 引导器"
+          assert not any(n.endswith("runtime/bin/java.exe") for n in lite_names), "轻量 zip 不该带运行时"
+          with tarfile.open(rt[0], "r:xz") as t:
+              assert "./bin/java.exe" in t.getnames(), "运行时压缩包结构不对"
+          print("✓ 完整 zip / 轻量 zip / 运行时资产三份都对")
           PY
 
       - uses: actions/upload-artifact@v4
@@ -156,6 +206,7 @@ jobs:
           path: |
             dist/*.zip
             dist/*.msi
+            dist/dsh-desktop-runtime-*
           if-no-files-found: warn
 
   # ── 汇总发布 ───────────────────────────────────────────────────────────

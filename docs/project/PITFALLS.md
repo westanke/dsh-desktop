@@ -695,3 +695,83 @@ Release 天然长在 GitHub 上——主源上自然就是空的。
 
 **防回归**：新增事件分支时先确认"历史和实时叫同一个名字吗"，
 桥接的 `src/host/chat-adapter.ts` 里 `normalizeDshEvent` 加了前缀的实时名，客户端要跟上。
+
+---
+
+### 管道会吞掉 curl 的退出码
+
+**现象**：启动引导器"下载失败"，但报的错是 sha256 校验不过、或者拿一个**空文件**去解压；
+把同一个 URL 手敲一遍明明下得来。
+
+**根因**：写成了
+
+```sh
+if download "$url" "$TMP_TAR" 2>&1 | sed 's/^/    /'; then
+```
+
+管道的退出码是**最后一个命令**（`sed`）的，恒为 0。于是 curl 404 / 超时也被当成成功，
+继续拿空文件或半截文件往下走，错误信息完全对不上真因。
+
+**修法**：`if` 里不要接管道，直接判断命令本身：
+
+```sh
+if download "$url" "$TMP_TAR"; then
+```
+
+要缩进就在 `download()` 内部重定向，或者干脆不缩进——正确比好看重要。
+
+**防回归**：引导器（`tools/launcher/dsh-desktop.sh`）的下载循环没有任何管道；
+真机用 404 的 URL 跑一遍，应当**直接**进"换源"而不是走到校验。
+
+---
+
+### 临时文件不要写 /tmp
+
+**现象**：下载运行环境时报 `curl: (23) Failed writing body (8192 != 16384)`，
+HTTP 状态码是 200，服务端明明在正常发字节。
+
+**根因**：`/tmp` 在这台机器上被拦（只读 / noexec / 空间受限，视环境而定），
+curl 写不进去。错误出在**写本地文件**这一步，跟网络、跟 URL 都没关系。
+
+**修法**：落点改用户缓存目录，失败再退系统临时目录：
+
+```sh
+DL_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dsh-desktop/downloads"
+mkdir -p "$DL_DIR" 2>/dev/null || DL_DIR="${TMPDIR:-/tmp}"
+```
+
+**防回归**：任何"下载到本地再解压"的流程，落点一律先想清楚是不是用户可写目录。
+
+---
+
+### 运行时 tar 不要多套一层顶层目录
+
+**现象**：轻量包引导器下载、解压都"成功"，但下一次启动又去下一遍；
+手动去看，解压出来是 `<RT_BASE>/<RT_BASE>/bin/java`。
+
+**根因**：打包时 `tar -cJf out.tar.xz -C dist "$RT_BASE"`（带着目录名打），
+而引导器解压目标是 `RT_HOME`，于是内容落到 `RT_HOME/<RT_BASE>/` 下面，
+引导器按 `RT_HOME/bin/java` 找，自然找不到——于是判断"没有运行时"，重新下载。
+
+**修法**：打包时 `-C "$STAGE" .`（内容直接进 tar，不带顶层目录），
+与 `jpackage` 的 `lib/runtime/` 布局一致。
+
+**防回归**：CI 里断言 `tar -tJf <资产> | grep -qx './bin/java'`——
+既不能是 `dsh-desktop-runtime-*/bin/java`，也不能缺这一行。
+
+---
+
+### jlink 的 OOM 与"内存参数要早于所有 JVM 工具"
+
+**现象**：`package.sh` 在 jlink 那步报
+`OutOfMemoryError: unable to create native thread`，而同一台机器上
+手动敲同样的 jlink 命令是好的。
+
+**根因**：`export JAVA_TOOL_OPTIONS="-XX:ActiveProcessorCount=1 …"` 写在脚本
+**后面**（jpackage 那段），jlink 跑在它之前，没被限制线程数——
+开发机地址空间就 4GB，JVM 默认按核数建 GC 线程，直接起不来。
+
+**修法**：`package.sh` 里 `export TMPDIR` / `JAVA_TOOL_OPTIONS` 放在
+**任何 JVM 工具之前**（现在在第 87 行，jlink、IconGen、jpackage 共用一份）。
+
+**防回归**：往 `package.sh` 里加新的 JVM 工具调用时，确认它排在那两行 export 之后。

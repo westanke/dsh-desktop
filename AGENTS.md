@@ -260,6 +260,10 @@ JUnit + Gradle 那套无处安放。这是 `TECH-DEBT.md` 的 **DEBT-001**，不
 - `会话标题为空`
 - `同包不同目录的扩展函数要显式 import`
 - `修沙箱里的 java 脚本报 unable to create native thread`
+- `管道会吞掉 curl 的退出码`
+- `临时文件不要写 /tmp`
+- `运行时 tar 不要多套一层顶层目录`
+- `jlink 的 OOM 与"内存参数要早于所有 JVM 工具"`
 - `表格只按行首管道判定会退化`
 - `KDoc 里写 image 通配符会吃掉后面的注释`
 - `截图坐标要按窗口真实像素算`

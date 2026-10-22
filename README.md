@@ -54,7 +54,10 @@ dsh-desktop/
 ├── lib/                        运行时依赖（50 个 jar，含 Compose 与 skiko）
 ├── tools/
 │   ├── build.sh                编译（直调 K2JVMCompiler，按平台筛 skiko 运行时）
-│   ├── package.sh              编译 + 打 jar + jpackage → deb / Windows zip
+│   ├── package.sh              编译 + 打 jar + jlink 运行时 + jpackage → deb / zip（LITE=1 出轻量包）
+│   ├── build-runtime.sh        运行时镜像 → tar.xz + sha256（轻量包首次启动下载它）
+│   ├── slim-icons.py           material-icons-extended 瘦身（36 MB → 0.05 MB）
+│   ├── launcher/               启动引导器（自带 runtime 优先，否则国内优先下载）
 │   ├── fetch-platform.sh       按需拉取目标平台的 skiko 原生库
 │   ├── docs-check.sh           文档一致性门禁（28 项）
 │   ├── verify-markdown.sh      Markdown 解析用例（表格形状断言）
@@ -73,6 +76,19 @@ dsh-desktop/
 ---
 
 ## 3. 安装与运行
+
+### 3.0 两份包，按网络情况选
+
+| 包 | 体积 | 适合谁 |
+| --- | --- | --- |
+| `dsh-desktop_<版本>_<架构>.deb`（完整） | ~68 MB | 默认选择。自带运行时，装完**完全不联网**也能用 |
+| `dsh-desktop-lite_<版本>_<架构>.deb`（轻量） | ~40 MB | 网络稳定、想少下一半的用户。**首次启动**会从国内源拉一份 29 MB 运行时 |
+
+轻量包第一次启动时按 **Gitee → GitHub** 的顺序拉运行时（国内 Gitee 有 CDN），
+下完校验 sha256 再解压到 `~/.local/share/dsh-desktop/`，之后不再联网。
+顺序可用 `DSH_RUNTIME_MIRROR=github` 对调；完全离线时
+`DSH_RUNTIME_TARBALL=<本地 tar.xz>` 或 `DSH_RUNTIME_HOME=<已解压目录>` 直接喂给它。
+Windows 侧同理（`dsh-desktop.bat` 引导器，用系统自带 curl + tar）。
 
 ### 3.1 UOS / Deepin：安装 deb（推荐）
 
@@ -281,7 +297,7 @@ GitHub 的 `mirror-sync.yml` 每 3 小时用 `git push --mirror` 把 Gitee 的 r
 | 文件 | 触发 | 干什么 |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | push 到 `main`、PR、手工 | 编译 + 文档门禁 + 两组纯函数用例（linux-x64），5 分钟内给结论 |
-| `.github/workflows/release.yml` | push tag `v*`、手工 | 三平台现场构建：`ubuntu-22.04` 出 amd64 deb、`ubuntu-22.04-arm` 出 arm64 deb、`windows-latest` 出 zip + msi，tag 时自动建 Release 并附 `SHA256SUMS`。v1.0.0 实测：91 MB / 89 MB / zip 96 MB + msi 96 MB |
+| `.github/workflows/release.yml` | push tag `v*`、手工 | 三平台现场构建，每个平台出**完整包 + 轻量包 + 运行时压缩包**：`ubuntu-22.04` 出 amd64 deb、`ubuntu-22.04-arm` 出 arm64 deb、`windows-latest` 出 zip + msi，tag 时自动建 Release 并附 `SHA256SUMS`。v1.0.0 实测：deb 91 MB → 瘦身后 68 MB，轻量 deb 40 MB，zip 96 MB（CI 侧图标同样瘦身） |
 | `.github/workflows/mirror-sync.yml` | 每 3 小时、手工 | ① Gitee → AtomGit → GitHub 单向镜像 refs；② 把 GitHub 最新 Release 搬成 Gitee 发行版 |
 
 手工触发 `release.yml` 只构建、不发布，用来在打 tag 前先验一遍三平台。

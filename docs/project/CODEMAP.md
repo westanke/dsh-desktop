@@ -17,7 +17,7 @@
 | --- | --- |
 | `src/main/kotlin/io/github/westanke/dshdesktop/` | 全部源码（33 个文件，约 11 260 行） |
 | `lib/` | 运行时依赖 50 个 jar（Compose、Skiko、OkHttp、序列化） |
-| `tools/` | 构建、打包、门禁、图标、mock 服务端 |
+| `tools/` | 构建、打包、门禁、图标、mock 服务端、**图标瘦身 / 运行时资产 / 启动引导器** |
 | `docs/project/` | 制度文档（本文件在这） |
 | `.github/workflows/` | CI、发布、镜像同步（见 A.4） |
 | `version.txt` | 版本号**唯一来源**，`build.sh` / `package.sh` / 门禁都读它 |
@@ -73,7 +73,11 @@
 | 路径 | 作用 | 产出/副作用 |
 | --- | --- | --- |
 | `tools/build.sh` | 直调 `K2JVMCompiler` 编译（不用 Gradle）；按 `TARGET_PLATFORM` 过滤 skiko 运行时；缺编译器依赖自动从 Maven 下 | `build/classes`、`build/dsh-desktop.jar` |
-| `tools/package.sh` | 编译 → 打 jar → jpackage → **补桌面入口重打 deb**；Windows 分支出 app-image + zip（有 WiX 时另出 msi） | `dist/dsh-desktop_<ver>-1_<arch>.deb` / `dist/dsh-desktop-<ver>-windows-x64.zip` |
+| `tools/package.sh` | 编译 → 打 jar → jlink 精简运行时 → jpackage → **补桌面入口重打 deb**；Windows 分支出 app-image + zip（有 WiX 时另出 msi）；**`LITE=1` 出轻量包**（拿掉运行时、换成启动引导器） | `dist/dsh-desktop_<ver>-1_<arch>.deb` / `dist/dsh-desktop-lite_<ver>-1_<arch>.deb` / `dist/dsh-desktop-<ver>-windows-x64{,-lite}.zip` |
+| `tools/slim-icons.py` | 把 36 MB 的 material-icons-extended 瘦成**源码里 import 到的那 23 个图标**（白名单现抓，漏抓就是编译期 unresolved reference） | `build/app-input/material-icons-extended-*.jar`（0.05 MB） |
+| `tools/build-runtime.sh` | 把 jlink 出的运行时镜像打成 **tar.xz + sha256**（轻量包首次启动下载它；与完整包里同一份字节） | `dist/dsh-desktop-runtime-<ver>-<平台>.tar.xz{,.sha256}` |
+| `tools/launcher/dsh-desktop.sh` | **启动引导器（Linux）**：自带 runtime 优先 → 用户目录已下载的复用 → 都没有就按国内优先下载（Gitee→GitHub）并校验 sha256，解压后启动；`DSH_RUNTIME_HOME` / `DSH_RUNTIME_TARBALL` / `DSH_LAUNCHER_DRY_RUN` 兜底与诊断 | 装到 `<安装目录>/bin/dsh-desktop` |
+| `tools/launcher/dsh-desktop.bat` | 同上，Windows 版（curl.exe + tar.exe，Win10 1803+ 自带） | 装到 `<解压目录>/dsh-desktop.bat` |
 | `tools/fetch-platform.sh` | 拉取目标平台的 skiko 原生库：先找本地种子（`lib/` 里那份、以及历史上放在 tools 下的 Windows 那份），再走 Maven，下完用 `zipfile` 校验不是 HTML | 落进平台库里那份 `skiko-awt-runtime-<平台>-0.8.18.jar` |
 | `tools/docs-check.sh` | 文档门禁（28 项） | 退出码 0/1 |
 | `tools/verify-history.sh` | 真实历史解析验证（含专用块分布、耗时可算率） | 退出码 0 / 2（回归）/ 3（输入） |

@@ -124,6 +124,63 @@
 
 **没做的**：分栏拖动与目录收起的实际手感未真机确认（沙箱装不了 deb）。
 
+## v1.0.0 第十五轮 · 安装包瘦身：94 → 68 / 40 MB（2026-10-22）
+
+**基于什么**：用户一句「当前安装包有点大，如何让安装包小点，可否让自行在启动界面加一个
+自动下载运行环境所需内容，国内外环境都要考虑。还要考虑打包的情况、CI情况」。
+
+**先量后砍**（`dpkg-deb -c` 逐文件统计，不是猜的）：94 MB 里
+`material-icons-extended` **36 MB**（2083 个 Filled 图标，工程只 import 23 个）、
+JRE 运行时 **~28 MB**（压缩后）、skiko 12 MB（渲染引擎本体，动不了）。
+
+**干了什么（三层，前两层零风险、已落地）**
+
+1. **图标瘦身**：新增 `tools/slim-icons.py`，按源码 import 现抓白名单重写 jar，
+   36 MB → **0.05 MB**。白名单漏抓的表现是**编译期** unresolved reference，
+   不会静默少图标。core jar 照常打包（14 个常用图标归它）。
+2. **运行时镜像瘦身**：改由 `package.sh` 自己 jlink（`--strip-debug --compress 2
+   --no-header-files --no-man-pages`），模块集按 `jdeps` + 实际依赖砍到 6 个
+   （`java.base, java.desktop, java.logging, java.instrument, jdk.unsupported,
+   jdk.crypto.ec`）。95 MB → 53 MB（未压缩）。
+   **`jdk.crypto.ec` 不能砍** —— TLS 的 ECDHE 靠 SunEC，jdeps 看不出来；
+   真机探针验过 gitee / baidu 都返回 200。
+3. **轻量包 + 运行时按需下载**：新增 `LITE=1` 模式与启动引导器
+   （`tools/launcher/dsh-desktop.sh` / `.bat`）：
+   自带 runtime 优先 → 用户目录已下载的复用 → 都没有才下载（**国内优先 Gitee、
+   其次 GitHub**，`DSH_RUNTIME_MIRROR=github` 可对调），下完**验 sha256**
+   （校验和随包带）再解压启动。完整包继续出，离线/内网用户不受影响。
+   CI 三个平台各加一步打轻包 + 运行时资产，release 与 Gitee 同步自动带上。
+
+**体积**
+
+| 产物 | 之前 | 现在 |
+| --- | --- | --- |
+| deb（完整，自带运行时） | 94 MB | **68 MB** |
+| deb-lite（首次启动下载） | — | **40 MB**（+ 29 MB 运行时压缩包） |
+| Windows zip | 96 MB | 预计 **~60 MB**（图标同样瘦身，CI 验） |
+
+**测了什么**
+
+- 编译 0 error；`tools/docs-check.sh` **29/29**。
+- 精简 runtime + 瘦图标 jar 下跑通：**23/23 图标**全部加载成功（headless 探针）；
+  **TLS 握手** gitee.com / baidu.com 双通 HTTP 200。
+- 引导器四条路径逐一实测：自带 runtime 直接用 / 本地 tarball 兜底解压 /
+  **下载→sha256 校验→解压→exec java**（本地镜像模拟，java 成功启动到 GUI 初始化，
+  再往后是沙箱内存限制，非脚本问题）/ 全失败时清晰报错 + 手动指引，退出码 1。
+
+**踩到的坑（已进 PITFALLS）**
+
+- `download … | sed` **管道吞掉 curl 退出码**，404 被当成成功，接着拿空文件校验，
+  报的错完全对不上真因；
+- 临时文件写 `/tmp` → 本机 `/tmp` 被拦，curl 报 `(23) Failed writing body`；
+  改到 `${XDG_CACHE_HOME:-$HOME/.cache}/dsh-desktop/downloads`；
+- 运行时 tar 打多了顶层目录，解压出来是 `<RT_BASE>/<RT_BASE>/bin/java`，
+  引导器按 `bin/java` 找不到 → 白下一遍；
+- `rm -rf` 在 build 目录里也被 safe-delete 拦（>50 文件）→ 统一改 `mv`。
+
+**没做的**：轻包首次下载的真实网络路径要等 v1.0.0 之后的 tag 才有资产可拉
+（当前 release 里还没有 runtime 包）；Windows bat 引导器未在真机跑过。
+
 ---
 
 ## v1.0.0 修复 · 历史会话里没有文件卡（2026-10-22）

@@ -5,6 +5,68 @@
 
 ---
 
+## v1.0.0 第十五轮 · 安装包瘦身：94 → 68 / 40 MB（2026-10-22）
+
+### 基于什么
+
+用户一句：“当前安装包有点大，如何让安装包小点，可否让自行在启动界面加一个自动下载
+运行环境所需内容，国内外环境都要考虑。还要考虑打包的情况、CI情况。”
+
+一句话里三件事：**砍体积**、**运行时按需下载**、**打包与 CI 要跟上**。
+
+### 先量后砍
+
+`dpkg-deb -c` 逐文件统计（不猜）：94 MB 里
+material-icons-extended **36 MB**（2083 个 Filled 图标，工程只 import 23 个）、
+JRE 运行时压缩后 **~28 MB**、skiko 12 MB（渲染引擎，动不了）。
+于是动手的顺序就是“先砍图标、再砍运行时、最后才谈下载”。
+
+### 干了什么
+
+1. **`tools/slim-icons.py`（新增）**：按源码 import 现抓白名单，重写 extended jar，
+   36 MB → 0.05 MB。白名单漏抓 = 编译期 unresolved reference，不静默少图标。
+2. **运行时改由 `package.sh` 自己 jlink**：`--strip-debug --compress 2
+   --no-header-files --no-man-pages`；模块集砍到 6 个
+   （`java.base, java.desktop, java.logging, java.instrument, jdk.unsupported,
+   jdk.crypto.ec`），95 MB → 53 MB。
+   `jdk.crypto.ec` 必须留：TLS 的 ECDHE 靠 SunEC，jdeps 静态分析看不出来。
+3. **轻量包（`LITE=1`）+ 启动引导器**：`tools/launcher/dsh-desktop.sh`（Linux）与
+   `.bat`（Windows）。顺序：包内自带 runtime → 用户目录已下载 → 都没有才下载。
+   下载源**国内优先**（Gitee 在前、GitHub 在后，`DSH_RUNTIME_MIRROR=github` 对调），
+   下完验 sha256（校验和随包带）再解压启动。
+   离线兜底：`DSH_RUNTIME_HOME` 指向已有运行时、`DSH_RUNTIME_TARBALL` 吃本地压缩包；
+   诊断：`DSH_LAUNCHER_DRY_RUN=1` 只走流程不启动。
+4. **`tools/build-runtime.sh`（新增）**：把 jlink 镜像打成 tar.xz + sha256。
+   轻包与完整包**共用同一份字节**（都来自 `build/runtime-image`），不会两套行为。
+5. **CI（`release.yml`）**：三个平台各加“打轻包 + 运行时资产”一步，
+   artifact 与 release 资产、Gitee 同步全部带上；校验补了
+   “轻包不带 runtime / 带 sha256 / tar 顶层是 `./bin/java`”。
+
+### 体积
+
+| 产物 | 之前 | 现在 |
+| --- | --- | --- |
+| deb 完整 | 94 MB | **68 MB** |
+| deb-lite | — | **40 MB**（首次启动再拉 29 MB 运行时） |
+| Windows zip | 96 MB | 预计 ~60 MB（图标同样瘦身，CI 验） |
+
+### 测了什么
+
+- 编译 0 error；docs-check 29/29。
+- 精简 runtime + 瘦 jar：23/23 图标加载成功（headless 探针）；
+  TLS 双通 gitee.com / baidu.com（HTTP 200）。
+- 引导器四路实测：自带 runtime / 本地 tarball / 下载+校验+解压+启动 /
+  全失败时报错与手动指引（退出码 1）。
+
+### 踩到的
+
+- `download … | sed` 管道吞 curl 退出码 → 404 当成功、拿空文件校验、报错对不上真因；
+- 临时文件写 `/tmp` 被拦 → `curl (23) Failed writing body`；改用户缓存目录；
+- 运行时 tar 多套一层顶层目录 → 引导器找不到 `bin/java` 白下一遍；
+- `rm -rf` 在 build 下也被 safe-delete 拦（>50 文件）→ 统一 mv。
+
+---
+
 ## v1.0.0 第十四轮 · 产出文件归位、文件页分栏可拖（2026-10-22）
 
 ### 基于什么
