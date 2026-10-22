@@ -59,18 +59,22 @@ jobs:
           ls -lh dist/
           # 注意：不要 `dpkg-deb -c … | grep -q`，grep 命中即关闭管道，
           # 上游 tar 收到 EPIPE 会报 "tar: stdout: write error" 并让整条流水线判红。
-          dpkg-deb -I dist/*.deb
-          contents="$(dpkg-deb -c dist/dsh-desktop_*.deb)"
+          # `dist/*.deb` 会同时展开完整包和轻量包，dpkg-deb 把第二个当成 control 组件名：
+          # "contains no control component"。必须写死完整包的模式。
+          VER="$(tr -d '[:space:]' < version.txt)"
+          dpkg-deb -I "dist/dsh-desktop_${VER}-1_"*.deb
+          contents="$(dpkg-deb -c "dist/dsh-desktop_${VER}-1_"*.deb)"
           grep -q 'usr/share/applications/dsh-desktop.desktop' <<< "$contents"
           echo "✓ 包内桌面入口就位"
           # 轻量包三件事：不带 runtime、bin/dsh-desktop 是引导器脚本、带了运行时校验和
-          lite_contents="$(dpkg-deb -c dist/dsh-desktop-lite_*.deb)"
+          lite_contents="$(dpkg-deb -c "dist/dsh-desktop-lite_${VER}-1_"*.deb)"
           ! grep -q 'lib/runtime/bin/java' <<< "$lite_contents"
           grep -q 'VERSION' <<< "$lite_contents"
           grep -q 'dsh-desktop-runtime-.*\.sha256' <<< "$lite_contents"
           test -f dist/dsh-desktop-runtime-*-linux-x64.tar.xz
           # 引导器解压后期望 bin/java 就在根下（不多套一层目录）
-          tar -tJf dist/dsh-desktop-runtime-*-linux-x64.tar.xz | grep -qx './bin/java'
+          runtime_listing="$(tar -tJf dist/dsh-desktop-runtime-*-linux-x64.tar.xz)"
+          grep -qx './bin/java' <<< "$runtime_listing"
           echo "✓ 轻量包与运行时资产就位"
 
       - uses: actions/upload-artifact@v4
@@ -121,16 +125,18 @@ jobs:
           set -euo pipefail
           ls -lh dist/
           # 同上：先整体取回再判断，避免 grep -q 提前关管道把 dpkg-deb 打成失败
-          info="$(dpkg-deb -I dist/dsh-desktop_*.deb)"
-          contents="$(dpkg-deb -c dist/dsh-desktop_*.deb)"
+          VER="$(tr -d '[:space:]' < version.txt)"
+          info="$(dpkg-deb -I "dist/dsh-desktop_${VER}-1_"*.deb)"
+          contents="$(dpkg-deb -c "dist/dsh-desktop_${VER}-1_"*.deb)"
           grep -q 'Architecture: arm64' <<< "$info"
           grep -q 'skiko-awt-runtime-linux-arm64' <<< "$contents"
           grep -q 'usr/share/applications/dsh-desktop.desktop' <<< "$contents"
           echo "✓ 架构与桌面入口都对"
-          lite_contents="$(dpkg-deb -c dist/dsh-desktop-lite_*.deb)"
+          lite_contents="$(dpkg-deb -c "dist/dsh-desktop-lite_${VER}-1_"*.deb)"
           ! grep -q 'lib/runtime/bin/java' <<< "$lite_contents"
           test -f dist/dsh-desktop-runtime-*-linux-arm64.tar.xz
-          tar -tJf dist/dsh-desktop-runtime-*-linux-arm64.tar.xz | grep -qx './bin/java'
+          runtime_listing="$(tar -tJf dist/dsh-desktop-runtime-*-linux-arm64.tar.xz)"
+          grep -qx './bin/java' <<< "$runtime_listing"
           echo "✓ 轻量包与运行时资产就位"
 
       - uses: actions/upload-artifact@v4
