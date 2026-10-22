@@ -132,6 +132,15 @@ class AppState(
     private var oldestSeq: Int? = null
 
     /**
+     * 标题下那两块悬挂面板（待办 / 轨迹）的展开与否。
+     *
+     * 它们以前是右侧抽屉的栏位，挪到标题下之后就不是"开一个面板"而是"展开一段"了
+     * ——所以不复用 `chatPanel`：抽屉是"另起一列"，悬挂是"就地长高"。
+     */
+    var todosShelfOpen by mutableStateOf(false)
+    var traceShelfOpen by mutableStateOf(false)
+
+    /**
      * 这个会话历次端出来的**产出文件**，与消息流分开存。
      *
      * 为什么不能只靠消息流里的卡片：历史接口默认只给最近约 300 条，

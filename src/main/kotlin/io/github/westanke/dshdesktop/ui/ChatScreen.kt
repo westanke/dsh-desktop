@@ -82,6 +82,17 @@ fun ChatScreen(state: AppState) {
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
         ChatTopBar(state)
+        // 待办与轨迹：官方把它们贴着会话头挂，不是放进侧边栏。默认收成一行，
+        // 展开也限高——注脚不该把正文挤出屏幕。
+        if (session != null) {
+            Column(
+                Modifier.padding(top = 6.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                TodoShelf(state)
+                TraceShelf(state)
+            }
+        }
         if (session == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 EmptyState(
@@ -381,30 +392,55 @@ private fun NoticeBar(
 @Composable
 private fun ChatPanelToggles(state: AppState) {
     val colors = LocalAppColors.current
-    val entries = listOf(
-        ChatPanel.Todos to state.todoItems.count { !it.done },
-        ChatPanel.Trace to state.trace.size,
-        ChatPanel.Jobs to state.jobs.count { it.status == JobStatus.RUNNING },
-    )
+    // 待办与轨迹是标题下的悬挂面板，这里的胶囊只负责展开/收起它们；
+    // 后台任务还是右侧抽屉（它跟"这一轮"无关，是机器层面的东西）。
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        entries.forEach { (panel, count) ->
-            val on = state.chatPanel == panel
-            Surface(
-                onClick = {
-                    state.chatPanel = if (on) null else panel
-                    if (panel == ChatPanel.Jobs && !on) state.refreshJobs()
-                },
-                shape = RoundedCornerShape(50),
-                color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-            ) {
-                Text(
-                    if (count > 0) "${panel.label} $count" else panel.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (on) MaterialTheme.colorScheme.primary else colors.textTertiary,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-            }
+        ShelfToggle(
+            label = "待办",
+            count = state.todoItems.count { !it.done },
+            on = state.todosShelfOpen,
+            onClick = { state.todosShelfOpen = !state.todosShelfOpen },
+        )
+        ShelfToggle(
+            label = "轨迹",
+            count = state.trace.sumOf { it.steps.size },
+            on = state.traceShelfOpen,
+            onClick = { state.traceShelfOpen = !state.traceShelfOpen },
+        )
+        val jobsOn = state.chatPanel == ChatPanel.Jobs
+        Surface(
+            onClick = {
+                state.chatPanel = if (jobsOn) null else ChatPanel.Jobs
+                if (!jobsOn) state.refreshJobs()
+            },
+            shape = RoundedCornerShape(50),
+            color = if (jobsOn) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        ) {
+            val running = state.jobs.count { it.status == JobStatus.RUNNING }
+            Text(
+                if (running > 0) "${ChatPanel.Jobs.label} $running" else ChatPanel.Jobs.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (jobsOn) MaterialTheme.colorScheme.primary else colors.textTertiary,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
         }
+    }
+}
+
+@Composable
+private fun ShelfToggle(label: String, count: Int, on: Boolean, onClick: () -> Unit) {
+    val colors = LocalAppColors.current
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+    ) {
+        Text(
+            if (count > 0) "$label $count" else label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (on) MaterialTheme.colorScheme.primary else colors.textTertiary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }
 

@@ -2,6 +2,9 @@ package io.github.westanke.dshdesktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -277,6 +281,11 @@ fun Composer(state: AppState) {
 private fun ReasoningShelf(text: String) {
     val colors = LocalAppColors.current
     var expanded by remember { mutableStateOf(false) }
+    // 展开区自己滚到底：思考是流式的，新内容不断追加，停在顶部等于"什么都没显示"
+    val scroll = rememberScrollState()
+    LaunchedEffect(text.length) {
+        if (expanded) scroll.animateScrollTo(scroll.maxValue)
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -297,18 +306,39 @@ private fun ReasoningShelf(text: String) {
         ) {
             StatusDot(MaterialTheme.colorScheme.primary, 5)
             Spacer(Modifier.width(8.dp))
-            Text(
-                "思考中",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.textSecondary,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-            )
-            Text(
-                "${text.length} 字",
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.textTertiary,
-            )
+            if (text.isBlank()) {
+                Text(
+                    "思考中",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.textSecondary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                )
+            } else {
+                // 折叠态也把内容滚出来：只写"思考中 N 字"等于什么都没说。
+                // 取**尾部**再让它横向滚动 —— 流式思考最有信息量的永远是最后一句
+                // （Compose 没有 TextOverflow.StartEllipsis，所以自己截）。
+                val flat = text.replace('\n', ' ')
+                val tail = if (flat.length > 64) "…" + flat.takeLast(64) else flat
+                Text(
+                    tail,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.5.sp,
+                    ),
+                    color = colors.textSecondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .basicMarquee(
+                            iterations = Int.MAX_VALUE,
+                            animationMode = MarqueeAnimationMode.Immediately,
+                            velocity = 34.dp,
+                            initialDelayMillis = 300,
+                        ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.width(6.dp))
             Icon(
                 if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
@@ -322,7 +352,7 @@ private fun ReasoningShelf(text: String) {
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp, max = 132.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scroll),
             ) {
                 Text(
                     text,

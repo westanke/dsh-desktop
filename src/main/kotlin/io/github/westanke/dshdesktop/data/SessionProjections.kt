@@ -73,8 +73,14 @@ private val KNOWN_PRESET_LABELS = mapOf(
 
 private fun knownPresetLabel(value: String): String = KNOWN_PRESET_LABELS[value] ?: value
 
-/** 轨迹里的一个事件节点。`kind` 是事件类型原文，UI 直接显示，不翻译成猜的名字。 */
-data class TraceStep(val kind: String, val seq: Int, val at: Long)
+/**
+ * 轨迹里的一个事件节点。`kind` 是事件类型原文，UI 直接显示，不翻译成猜的名字。
+ *
+ * [label] 是**这一条在说什么**的一句话摘要（工具名 + 参数、或正文开头）。
+ * 官方的轨迹是线性时间轴：一行一条，光给 `assistant/message` 这种类型名，
+ * 读者根本不知道这一步干了什么 —— 类型名是给机器看的，摘要才是给人看的。
+ */
+data class TraceStep(val kind: String, val seq: Int, val at: Long, val label: String = "")
 
 /**
  * 一轮（turn）。`startedAt/endedAt` 来自 `turn/start`、`turn/end` 的 `time`；
@@ -154,6 +160,47 @@ fun parseMaxSeq(events: List<JsonElement>): Int? = events
  * 历史是分页的，最早一轮可能没有 `turn/start`：那种"无主事件"归到 `index = 0` 的
  * 伪轮次里，并如实显示没有开始时间。
  */
+/**
+ * 一句话摘要：把"类型名"翻译成"这一步干了什么"。
+ *
+ * 认不出的事件类型返回**空串**（UI 就只显示类型名）——不猜，也不为了好看编一个。
+ */
+private fun stepLabel(event: JsonObject, type: String): String {
+    val data = event.obj("data") ?: return ""
+    return when (type) {
+        "tool/call" -> {
+            val name = data.str("name") ?: "tool"
+            val args = oneLine(data.str("arguments").orEmpty())
+            if (args.isBlank()) name else "$name · $args"
+        }
+        "user/message", "assistant/message" -> oneLine(plainText(data))
+        "tool/result" -> oneLine(plainText(data)).takeIf { it.isNotBlank() }?.let { "结果 · $it" } ?: ""
+        "turn/end" -> when (data.obj("reason")?.str("kind")) {
+            "error" -> "本轮失败"
+            "max-tokens" -> "达到输出上限"
+            "aborted" -> "已取消"
+            "completed" -> "正常收口"
+            else -> ""
+        }
+        else -> ""
+    }
+}
+
+/** 压成一行并截断：轨迹一行只放得下这么点，剩下的留给点开之后的原文。 */
+private fun oneLine(raw: String): String =
+    raw.replace(Regex("\\s+"), " ").trim().let { if (it.length > 90) it.take(90) + "…" else it }
+
+/** 取事件里的正文：`content` 可能是字符串，也可能是 `[{type:text,text:…}]` 块数组。 */
+private fun plainText(data: JsonObject): String {
+    val message = data.obj("message")
+    val content = (message ?: data)["content"]
+    return when (content) {
+        is JsonPrimitive -> content.contentOrNull.orEmpty()
+        is JsonArray -> content.mapNotNull { (it as? JsonObject)?.str("text") }.joinToString(" ")
+        else -> ""
+    }
+}
+
 fun buildTrace(events: List<JsonElement>): List<TraceTurn> {
     data class Builder(val index: Int, val startedAt: Long, val steps: MutableList<TraceStep>, var endedAt: Long?)
 
@@ -181,11 +228,11 @@ fun buildTrace(events: List<JsonElement>): List<TraceTurn> {
             }
             "turn/end" -> {
                 current?.endedAt = time
-                current?.steps?.add(TraceStep(type, seq, time))
+                current?.steps?.add(TraceStep(type, seq, time, stepLabel(event, type)))
                 current = null
             }
             else -> {
-                val step = TraceStep(type, seq, time)
+                val step = TraceStep(type, seq, time, stepLabel(event, type))
                 val target = current
                 if (target != null) target.steps.add(step) else orphans += step
             }

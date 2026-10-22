@@ -42,8 +42,6 @@ import io.github.westanke.dshdesktop.AppState
 import io.github.westanke.dshdesktop.ChatPanel
 import io.github.westanke.dshdesktop.data.JobStatus
 import io.github.westanke.dshdesktop.data.JobView
-import io.github.westanke.dshdesktop.data.TodoItem
-import io.github.westanke.dshdesktop.data.TraceTurn
 import io.github.westanke.dshdesktop.killJob
 import io.github.westanke.dshdesktop.loadJobOutput
 import io.github.westanke.dshdesktop.refreshJobs
@@ -80,9 +78,8 @@ fun ChatSidePanel(state: AppState) {
             PanelHeader(state, current)
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
             Box(Modifier.weight(1f).fillMaxWidth()) {
+                // 待办与轨迹挪到了标题下的悬挂面板（ui/ChatShelves.kt），抽屉里只剩机器层面的两栏
                 when (current) {
-                    ChatPanel.Todos -> TodosBody(state)
-                    ChatPanel.Trace -> TraceBody(state)
                     ChatPanel.Jobs -> JobsBody(state)
                     ChatPanel.Server -> ServerBody(state)
                 }
@@ -111,168 +108,6 @@ private fun PanelHeader(state: AppState, current: ChatPanel) {
         }
         IconButton(onClick = { state.chatPanel = null }, modifier = Modifier.size(26.dp)) {
             Icon(Icons.Filled.Close, "收起", tint = colors.textTertiary, modifier = Modifier.size(15.dp))
-        }
-    }
-}
-
-// ── 待办 ────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun TodosBody(state: AppState) {
-    val colors = LocalAppColors.current
-    val items = state.todoItems
-    if (items.isEmpty()) {
-        PanelEmpty(
-            title = "这个会话还没有待办",
-            hint = "内核在规划多步任务时会写 `todos` 投影。只有一步、或者内核版本没接这个投影时，这里就是空的。",
-        )
-        return
-    }
-    val done = items.count { it.done }
-    Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            "$done / ${items.size} 已完成",
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.textTertiary,
-            modifier = Modifier.padding(bottom = 6.dp),
-        )
-        items.forEach { item -> TodoRow(item) }
-    }
-}
-
-@Composable
-private fun TodoRow(item: TodoItem) {
-    val colors = LocalAppColors.current
-    val tint = when {
-        item.done -> colors.success
-        item.status == "in_progress" || item.status == "active" -> MaterialTheme.colorScheme.primary
-        item.status == "cancelled" || item.status == "canceled" -> colors.textTertiary
-        else -> colors.textSecondary
-    }
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
-            Modifier
-                .padding(top = 5.dp)
-                .size(9.dp)
-                .background(if (item.done) tint else Color.Transparent, CircleShape)
-                .then(
-                    if (item.done) Modifier
-                    else Modifier.background(tint.copy(alpha = 0.25f), CircleShape),
-                ),
-        )
-        Spacer(Modifier.width(9.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                item.content,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (item.done) colors.textTertiary else MaterialTheme.colorScheme.onSurface,
-            )
-            if (!item.done) {
-                Text(item.statusLabel, style = MaterialTheme.typography.labelSmall, color = tint)
-            }
-        }
-    }
-}
-
-// ── 轨迹 ────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun TraceBody(state: AppState) {
-    val colors = LocalAppColors.current
-    val turns = state.trace
-    val gap = state.seqGapHint()
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-        if (gap != null) {
-            // 断档说明放在轨迹顶部：轨迹本身就是"我漏了什么"的答案，先说清它自己不全
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(Tokens.radiusSm),
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-            ) {
-                Column(Modifier.padding(10.dp)) {
-                    Text(
-                        gap,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        "点这里重取",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.clickable { state.resyncHistory() },
-                    )
-                }
-            }
-        }
-        if (turns.isEmpty()) {
-            PanelEmpty(
-                title = "没有事件可画",
-                hint = "这份历史里没有 `turn/start` 之类的事件。空会话、或历史被截断到只剩正文时就是这样。",
-            )
-            return@Column
-        }
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            turns.forEach { turn -> TraceTurnCard(turn, colors.textTertiary) }
-        }
-    }
-}
-
-@Composable
-private fun TraceTurnCard(turn: TraceTurn, tertiary: Color) {
-    val colors = LocalAppColors.current
-    var open by remember(turn.index, turn.steps.size) { mutableStateOf(turn.index == 0 && turn.steps.size <= 6) }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Tokens.radiusSm))
-            .clickable { open = !open }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (turn.index == 0) "更早（无起始标记）" else "第 ${turn.index} 轮",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            turn.durationMs?.let {
-                Text(formatDuration(it), style = MaterialTheme.typography.labelSmall, color = tertiary)
-            }
-        }
-        Text(
-            buildString {
-                append("${turn.steps.size} 个事件")
-                if (turn.toolCount > 0) append(" · ${turn.toolCount} 次工具")
-                if (turn.endedAt == null && turn.index != 0) append(" · 未收口")
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = tertiary,
-            modifier = Modifier.padding(top = 1.dp),
-        )
-        if (open) {
-            Spacer(Modifier.size(6.dp))
-            // 按"类型 × 次数"聚合：一轮里常有几十条 delta，逐条列出来没人看得下去
-            turn.kinds.forEach { (kind, count) ->
-                Row(Modifier.padding(vertical = 1.dp)) {
-                    Text(
-                        if (count > 1) "$kind ×$count" else kind,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.5.sp,
-                        ),
-                        color = colors.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
         }
     }
 }
