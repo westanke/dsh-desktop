@@ -83,6 +83,18 @@ sealed interface ChatItem {
             }
 
         val hasError: Boolean get() = tools.any { it.isError }
+
+        val isRunning: Boolean get() = tools.any { it.result == null }
+
+        /**
+         * 整组墙钟耗时：逐条 [Tool.durationMs] 求和（串行执行时≈整组耗时）。
+         *
+         * 有任何一条缺耗时（时钟倒退、还没结果）就返回 null——宁可这一行不显示耗时，
+         * 也不要给个少算的数。折叠摘要里用，形态照手机版「耗时 8 秒 · 2 次工具调用」。
+         */
+        val totalDurationMs: Long?
+            get() = if (tools.isEmpty()) null
+            else tools.mapNotNull { it.durationMs }.takeIf { it.size == tools.size }?.sum()
     }
 
     data class Notice(

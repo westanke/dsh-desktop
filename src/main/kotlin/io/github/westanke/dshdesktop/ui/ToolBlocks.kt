@@ -43,17 +43,19 @@ import io.github.westanke.dshdesktop.data.toolBlockView
 /**
  * 一次工具调用的**成品块**。
  *
- * 折叠态只有一行：动作短语 · 关键参数 + 状态/耗时。展开后按工具类型换布局：
- * `read` 给路径头，`bash` 给 `$ 命令` + 输出，`edit`/`write` 给 `-`/`+` 对照，
- * 其余一律通用（格式化参数 + 原样结果）。
+ * 默认折叠成一行（对齐手机版）：动作短语 · 关键参数 + 状态/耗时，点击才展开。
+ * 展开后按工具类型换布局：`read` 给路径头，`bash` 给 `$ 命令` + 输出，
+ * `edit`/`write` 给 `-`/`+` 对照，其余一律通用（格式化参数 + 原样结果）。
  *
  * 分发本身在 `data/ToolBlockView.kt` 里（纯函数，可测）；这里只负责画。
  */
 @Composable
 fun ToolCallBlock(tool: ChatItem.Tool) {
     val colors = LocalAppColors.current
-    // 失败的调用默认展开：出问题时用户第一反应是"它到底干了什么"，不该再多点一次
-    var expanded by remember(tool.id) { mutableStateOf(tool.isError) }
+    // 默认折叠，和手机版（dsh-companion）对齐：一轮十几次工具调用全展开会把
+    // 助手正文挤出屏幕，读者只能一路滚。失败的也不自动展开——摘要行已有
+    // 红色"失败 · 耗时"提示，想看清楚再点一下；否则一整屏失败块会把会话冲掉。
+    var expanded by remember(tool.id) { mutableStateOf(false) }
     val view = remember(tool.id, tool.arguments, tool.result) {
         toolBlockView(tool.name, tool.arguments, tool.result)
     }

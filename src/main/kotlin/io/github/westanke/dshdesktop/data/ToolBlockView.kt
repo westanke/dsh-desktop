@@ -242,12 +242,18 @@ fun stripAnsiEscapes(text: String): String {
     return sb.toString()
 }
 
-/** 耗时的可读格式。负值已在 [toolDurationMs] 里判掉，这里只负责排版。 */
+/**
+ * 耗时的可读格式。负值已在 [toolDurationMs] 里判掉，这里只负责排版。
+ *
+ * 用中文单位、整秒取整（不再有 `1.2 s`）：折叠摘要一行里要和「2 次工具调用」
+ * 拼成"耗时 8 秒 · 2 次工具调用"，和手机版（dsh-companion）的读数一致；
+ * 亚秒级仍给毫秒，避免快工具被显示成"0 秒"。
+ */
 fun formatToolDuration(ms: Long): String = when {
-    ms < 1_000 -> "$ms ms"
-    ms < 60_000 -> String.format(java.util.Locale.US, "%.1f s", ms / 1000.0)
-    ms < 3_600_000 -> "${ms / 60_000}m ${(ms % 60_000) / 1_000}s"
-    else -> "${ms / 3_600_000}h ${(ms % 3_600_000) / 60_000}m"
+    ms < 1_000 -> "$ms 毫秒"
+    ms < 60_000 -> "${ms / 1_000} 秒"
+    ms < 3_600_000 -> "${ms / 60_000} 分 ${(ms % 60_000) / 1_000} 秒"
+    else -> "${ms / 3_600_000} 小时 ${(ms % 3_600_000) / 60_000} 分"
 }
 
 /**

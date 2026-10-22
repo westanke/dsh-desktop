@@ -90,10 +90,23 @@ dsh-desktop/
 `DSH_RUNTIME_TARBALL=<本地 tar.xz>` 或 `DSH_RUNTIME_HOME=<已解压目录>` 直接喂给它。
 Windows 侧同理（`dsh-desktop.bat` 引导器，用系统自带 curl + tar）。
 
+**首次启动失败会弹窗**（不再"点了没反应"）：`.desktop` 是 `Terminal=false`，
+没有终端可看，所以失败一律走弹窗 + 日志：
+
+```bash
+cat ~/.cache/dsh-desktop/launcher.log      # 每次启动都记：版本、APP_HOME、选中的 java、失败原因
+DSH_LAUNCHER_DRY_RUN=1 /opt/dsh-desktop/bin/dsh-desktop   # 只算不启动：看清楚用的是哪个 java
+```
+
+Windows 日志在 `%LOCALAPPDATA%\dsh-desktop\launcher.log`（双击启动时控制台一闪而过，
+失败会 `pause` 停住）。
+最常见的失败是 **发行版里没有对应版本的运行时资产**（404）——轻包的运行时资产名带版本号，
+必须和包本身成对发布；碰到就按上面的 `DSH_RUNTIME_*` 手动兜底，或换完整包。
+
 ### 3.1 UOS / Deepin：安装 deb（推荐）
 
 ```bash
-sudo dpkg -i dist/dsh-desktop_1.0.0-1_amd64.deb
+sudo dpkg -i dist/dsh-desktop_1.0.1-1_amd64.deb
 # 依赖不全时
 sudo apt-get -f install
 ```
@@ -128,7 +141,7 @@ sudo dpkg -r dsh-desktop
 
 ```bash
 mkdir -p ~/apps/dsh-desktop
-tar -xzf dist/dsh-desktop-1.0.0-portable-linux-x64.tar.gz -C ~/apps/dsh-desktop
+tar -xzf dist/dsh-desktop-1.0.1-portable-linux-x64.tar.gz -C ~/apps/dsh-desktop
 ~/apps/dsh-desktop/run.sh
 ```
 
@@ -142,13 +155,13 @@ tar -xzf dist/dsh-desktop-1.0.0-portable-linux-x64.tar.gz -C ~/apps/dsh-desktop
 ./tools/build.sh          # 只编译到 build/classes
 ./tools/build.sh jar      # 再打 build/dsh-desktop.jar
 ./tools/build.sh run      # 编译后直接开窗口
-./tools/package.sh        # 全流程 → dist/dsh-desktop_1.0.0-1_amd64.deb
+./tools/package.sh        # 全流程 → dist/dsh-desktop_1.0.1-1_amd64.deb
 ```
 
 arm64 机器上（或想交叉准备运行时）先拉一次对应平台的原生库，再打包：
 
 ```bash
-./tools/fetch-platform.sh linux-arm64   # → dist/dsh-desktop_1.0.0-1_arm64.deb
+./tools/fetch-platform.sh linux-arm64   # → dist/dsh-desktop_1.0.1-1_arm64.deb
 ```
 
 > 本项目**不用 Gradle**：`tools/build.sh` 直接调 `K2JVMCompiler`，并把 Compose / 序列化编译器插件通过 `-Xplugin` 挂上。原因见 `AGENTS.md` 第 2 节——受限环境里 Gradle 在配置阶段就会耗尽地址空间，而且没有包管理器时"仓库里有什么就编译出什么"更可复现。
@@ -171,7 +184,7 @@ build-windows.bat run        rem 编译后直接启动
 - Python 3（命令行名 `python` / `py` 均可）
 - WiX Toolset 3.x（可选，只有想出 msi 才需要）
 
-产物：`dist\dsh-desktop-1.0.0-windows-x64.zip`（有 WiX 时另出同名 msi）。
+产物：`dist\dsh-desktop-1.0.1-windows-x64.zip`（有 WiX 时另出同名 msi）。
 
 ---
 

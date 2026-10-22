@@ -775,3 +775,60 @@ mkdir -p "$DL_DIR" 2>/dev/null || DL_DIR="${TMPDIR:-/tmp}"
 **任何 JVM 工具之前**（现在在第 87 行，jlink、IconGen、jpackage 共用一份）。
 
 **防回归**：往 `package.sh` 里加新的 JVM 工具调用时，确认它排在那两行 export 之后。
+
+---
+
+### 轻量包的运行时必须与它同版本，发行版里没挂就是 404
+
+**现象**：装 `dsh-desktop-lite_1.0.0-1_amd64.deb`，点图标**什么都不发生**
+（2026-10-22 真机报障）。手动跑 `DRY_RUN=1 /opt/dsh-desktop/bin/dsh-desktop` 才看到：
+
+```
+尝试 https://gitee.com/.../v1.0.0/dsh-desktop-runtime-1.0.0-linux-x64.tar.xz
+curl: (22) The requested URL returned error: 404 Not Found
+尝试 https://github.com/.../v1.0.0/dsh-desktop-runtime-1.0.0-linux-x64.tar.xz
+curl: (22) The requested URL returned error: 404
+```
+
+**根因**：轻包的运行时资产名带 `$VERSION`（`dsh-desktop-runtime-<ver>-<平台>.tar.xz`），
+而 v1.0.0 的发行版只有 zip/msi/两个 deb——**没有**运行时资产（那是第 15 轮才加的，
+tag 早就打完了）。两处都对：URL 拼得没错，资产确实不存在。
+
+**修法**：发版必须让 **轻包与运行时资产同时出现**（`release.yml` 现在每个平台都出
+完整包 + 轻包 + 运行时 tar.xz + sha256）。已经装错版本的机器有两种救法：
+① 把运行时解压到 `~/.local/share/dsh-desktop/dsh-desktop-runtime-<ver>-<平台>/`；
+② `DSH_RUNTIME_TARBALL=<tar.xz> DSH_RUNTIME_HOME=<目录>` 手动喂给它。
+
+**防回归**：CI 校验里已经有「轻包不带 runtime / 带 sha256 / tar 里有 `./bin/java`」；
+**再加一条人为检查**：发完 tag 去 release 页面数资产——`lite deb` 和
+`runtime tar.xz` 必须成对出现，版本号必须一致。
+
+---
+
+### 启动器失败必须让人看见（Terminal=false 也得弹窗）
+
+**现象**：用户的原话是"无法打开，无任何提示"。没有弹窗、没有闪一下、没有日志，
+能查的东西全都没有。
+
+**根因**：`.desktop` 里写的是 `Terminal=false`，从图标/菜单启动时**没有终端**，
+启动器的 `echo … >&2` 全部进了黑洞。启动器本身逻辑是对的（下载、校验、解压、错误码），
+但**看不见的失败等于没报错**。
+
+**修法**：`tools/launcher/dsh-desktop.sh` 统一走 `fail()`：stderr + 日志 + 弹窗。
+日志固定 `~/.cache/dsh-desktop/launcher.log`（每次启动先记版本、APP_HOME、选中的 java）；
+弹窗按 `zenity → kdialog → xmessage → notify-send` 依次探测。
+**弹窗一律带 60 秒超时**：`zenity --timeout=60`、`xmessage -timeout 60`——
+否则 `xmessage` 没人点就永远不返回，自动化测试里直接吊死（踩过，超时被杀）。
+`[ -t 2 ]` 时**不弹**（终端里跑不该蹦窗口）；自动化要完全静默用
+`DSH_LAUNCHER_NO_DIALOG=1`。
+
+另外**不要 `exec java`**：`exec` 之后 java 起不来（缺库、线程限制、参数写错）
+脚本就没有机会报错了。现在前台跑、拿退出码，`1..128` 才算异常退出
+（128+ 是信号，注销/被杀不该弹"启动失败"吓人）。没有终端时 java 的 stderr
+也追加进日志，崩溃现场不至于彻底消失。
+
+Windows 侧同理：`dsh-desktop.bat` 双击时控制台一闪而过，失败分支要
+`echo %cmdcmdline% | find /i "/c" && pause`，日志写 `%LOCALAPPDATA%\dsh-desktop\launcher.log`。
+
+**防回归**：本地用 `DSH_LAUNCHER_NO_DIALOG=1` 跑四条路径——① 源不存在（404）
+② 本地 tar 包 ③ 已解压缓存 ④ java 退出码非 0；每条都要有非零退出码 + 日志有记录。

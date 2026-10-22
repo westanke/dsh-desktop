@@ -56,6 +56,7 @@ import io.github.westanke.dshdesktop.ChatPanel
 import io.github.westanke.dshdesktop.Nav
 import io.github.westanke.dshdesktop.data.ChatItem
 import io.github.westanke.dshdesktop.data.ModelSelection
+import io.github.westanke.dshdesktop.data.formatToolDuration
 import io.github.westanke.dshdesktop.chooseAgentPreset
 import io.github.westanke.dshdesktop.data.JobStatus
 import io.github.westanke.dshdesktop.loadAgentPresets
@@ -633,13 +634,19 @@ internal fun CollapsibleBlock(
 /**
  * 一组相邻的工具调用。
  *
- * 折叠态只给一行摘要（工具名 + 次数），展开后每条仍是各自的专用块
- * （read 给路径头、bash 给 `$ 命令`、edit 给 `-`/`+` 对照）。
+ * 折叠态只给一行摘要（工具名 + 次数 + 耗时，形态照手机版"耗时 8 秒 · 2 次工具调用"），
+ * 展开后每条仍是各自的专用块（read 给路径头、bash 给 `$ 命令`、edit 给 `-`/`+` 对照）。
  */
 @Composable
 private fun ToolGroupBlock(group: ChatItem.ToolGroup) {
     var expanded by remember { mutableStateOf(false) }
     val colors = LocalAppColors.current
+    // 组内墙钟耗时：逐条 durationMs 求和（串行执行时≈整组耗时）；还有在跑的就标"运行中"
+    val durationLabel = when {
+        group.tools.isEmpty() -> null
+        group.isRunning -> "运行中"
+        else -> group.totalDurationMs?.let { "耗时 " + formatToolDuration(it) }
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -667,7 +674,17 @@ private fun ToolGroupBlock(group: ChatItem.ToolGroup) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (durationLabel != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    durationLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textTertiary,
+                    maxLines = 1,
+                )
+            }
             if (group.hasError) {
+                Spacer(Modifier.width(8.dp))
                 Text("含失败", style = MaterialTheme.typography.labelSmall, color = colors.danger)
             }
         }

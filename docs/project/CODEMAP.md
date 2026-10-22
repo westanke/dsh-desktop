@@ -43,9 +43,9 @@
 | `src/data/DshApi.kt` | 874 | **唯一网络边界**：上游 kotlin-sdk 的 `DshWorkspaceClient`（含 provider / plugin / job / workspace 管理） | `DshWorkspaceClient`、`execute()`、`executeJson()`、`ensureSuccess()`、`endpoint()`、`WorkspaceApiException` | `AppState*` |
 | `src/data/ApiExt.kt` | 311 | SDK 没覆盖的端点：会话列表、历史分页、路径反查、提问、附件、插件清单 | `listChatSessions()`、`listMessagesPage()`、`resolvePath()`、`answerQuestion()`、`uploadEntry()`、`PromptPart`、`sendMessageParts()`、`uploadSessionAttachment()`、`readAttachment()`、`listPlugins()`、`setPluginLoaded()`、`ChatSession` | `AppState*` |
 | `src/data/Attachments.kt` | 54 | 待发送附件的内存表示与 MIME 猜测 | `PendingAttachment`、`MAX_ATTACHMENT_BYTES`、`guessMediaType()` | `AppStateProjections`、`ui/Composer` |
-| `src/data/ChatHistory.kt` | 483 | **唯一历史投影出口**：事件 → 可渲染条目（含图片附件引用）；交付物抽取与**按 seq 插回产出位置** | `parseHistory()`、`unwrapEvent()`、`mergeToolRuns()`、`mergeDeliverableCards()`、`contentAttachments()`、`deliverablesIn()`、`deliverableFiles()`、`HistoryPage`、`ChatItem`（7 个子类）、`DeliverableFile`、`ChatStats`、`chatStats()` | `AppState`、`AppStateChat`、`ui/ChatScreen` |
+| `src/data/ChatHistory.kt` | 495 | **唯一历史投影出口**：事件 → 可渲染条目（含图片附件引用）；交付物抽取与**按 seq 插回产出位置**；工具组合并 + **组内耗时聚合**（`totalDurationMs` / `isRunning`） | `parseHistory()`、`unwrapEvent()`、`mergeToolRuns()`、`mergeDeliverableCards()`、`contentAttachments()`、`deliverablesIn()`、`deliverableFiles()`、`HistoryPage`、`ChatItem`（7 个子类）、`DeliverableFile`、`ChatStats`、`chatStats()` | `AppState`、`AppStateChat`、`ui/ChatScreen` |
 | `src/data/SessionProjections.kt` | 248 | 投影解析：TODO、权限档位、断档 seq、按轮次轨迹（纯函数，无 Compose）；`TraceStep.label` 是一句话摘要 | `TodoItem`、`PermissionState`、`TraceTurn`、`TraceStep`、`parseTodos()`、`parsePermission()`、`parseMaxSeq()`、`buildTrace()`、`stepLabel()` | `AppStateProjections`、`ui/ChatShelves` |
-| `src/data/ToolBlockView.kt` | 263 | 工具调用的**专用视图分发**（纯函数，解析失败一律回落 Generic） | `ToolBlockView`、`toolBlockView()`、`toolActionPhrase()`、`extractReadBody()`、`stripAnsiEscapes()`、`toolDurationMs()` | `ui/ToolBlocks`、`tools/VerifyHistory.kt` |
+| `src/data/ToolBlockView.kt` | 269 | 工具调用的**专用视图分发**（纯函数，解析失败一律回落 Generic）；**耗时排版（中文单位、整秒）** | `ToolBlockView`、`toolBlockView()`、`toolActionPhrase()`、`extractReadBody()`、`stripAnsiEscapes()`、`toolDurationMs()`、`formatToolDuration()` | `ui/ToolBlocks`、`ui/ChatScreen`、`tools/VerifyHistory.kt` |
 | `src/data/Markdown.kt` | 489 | Markdown **解析层**（纯函数，无 Compose 依赖） | `parseMarkdown()`、`parseInline()`、`parseTableRow()`、`normalizeRow()`、`looksLikeTableRow()`、`MdBlock`、`InlineSpan` | `ui/MarkdownView`、`tools/VerifyMarkdown.kt` |
 | `src/data/AppStorage.kt` | 192 | 本地配置、**缓存目录**、令牌加密 | `AppStorage`、`root()`、`cacheRoot()`、`ConnectionProfile`、`UiPrefs`、`appJson` | `Main`、`AppState`、`AppStateFiles` |
 | `src/data/FileKinds.kt` | 267 | **文件类型判定与文本解码**（纯函数）：扩展名分类、内容降级、BOM/UTF-8/GBK 解码、图片魔数、体积格式化 | `FileKind`、`FileType`、`PreviewExtra`、`classifyFile()`、`refineByContent()`、`decodeText()`、`looksBinary()`、`imageFormatOf()`、`formatFileSize()`、`MAX_TEXT_PREVIEW_BYTES`、`MAX_IMAGE_BYTES` | `AppStateFiles`、`ui/FilesScreen`、`tools/VerifyFileKinds.kt` |
@@ -56,12 +56,12 @@
 | `src/ui/MarkdownView.kt` | 396 | Markdown **渲染层**：表格（横向滚动 + 列宽自适应 + 斑马纹）、标题、列表、引用、代码块 | `MarkdownText()`、`MarkdownTable()`、`CodeBlock()`、`columnWidths()`、`copyToClipboard()` | `ui/ChatScreen` |
 | `src/ui/RemoteImage.kt` | 127 | 会话图片附件：按需拉取 + LRU 缓存 + 大图预览状态 | `RemoteImage()`、`ImageStrip()`、`ImagePreview`、`clearImageCache()` | `ui/ChatScreen`、`ui/App` |
 | `src/ui/ConnectScreen.kt` | 175 | 连接页：地址 + 一次性配对码 | `ConnectScreen()` | `ui/App` |
-| `src/ui/ChatScreen.kt` | 756 | 会话页：页头（模型 / 推理等级 / Agent 预设 / 悬挂面板开关）、**标题下悬挂区**、消息流（**上下文注入默认折叠**、产出文件卡按 seq 落在产出那一轮）、断档提示、装配 | `ChatScreen()`、`ChatTopBar()`、`ChatPanelToggles()`、`ShelfToggle()`、`ModelPicker()`、`MessageRow()`、`CollapsibleBlock()`、`NoticeBar()` | `ui/App` |
+| `src/ui/ChatScreen.kt` | 773 | 会话页：页头（模型 / 推理等级 / Agent 预设 / 悬挂面板开关）、**标题下悬挂区**、消息流（**上下文注入默认折叠**、**工具调用默认折叠成一行摘要**、产出文件卡按 seq 落在产出那一轮）、断档提示、装配 | `ChatScreen()`、`ChatTopBar()`、`ChatPanelToggles()`、`ShelfToggle()`、`ModelPicker()`、`MessageRow()`、`ToolGroupBlock()`、`CollapsibleBlock()`、`NoticeBar()` | `ui/App` |
 | `src/ui/ChatShelves.kt` | 287 | 标题下悬挂的两块：**待办**（进度 + 列表）与**轨迹**（线性时间轴，一行一条：时间 · 类型 · 摘要） | `TodoShelf()`、`TraceShelf()`、`ShelfFrame()`、`TodoRow()`、`TraceStepRow()` | `ui/ChatScreen` |
 | `src/ui/ChatSidePanel.kt` | 298 | 会话右侧抽屉：后台任务 / 服务端能力面（**待办与轨迹已挪到 `ChatShelves`**） | `ChatSidePanel()`、`PanelHeader()`、`JobsBody()`、`ServerBody()`、`PanelEmpty()` | `ui/ChatScreen` |
 | `src/ui/Sidebar.kt` | 666 | 侧栏：品牌、通栏「新会话」（含工作区改名/移除）、五页导航、工作区头、会话行菜单、身份卡 | `Sidebar()`、`NavItem()`、`SectionHeader()`、`SessionRow()`、`RenameDialog()`、`relativeTime()` | `ui/App` |
 | `src/ui/Composer.kt` | 657 | 输入区：Enter 发送 / Shift+Enter 换行、插话、`/` 命令候选、**附件托盘**、**权限档位下拉**、**上方悬挂的思考过程（滚动显示内容）** | `Composer()`、**`ReasoningShelf()`（思考悬挂条：折叠滚尾部、展开跟到底）**、`PermissionPill()`、`AttachmentTray()`、`ImageChip()`、`pickAttachments()` | `ui/ChatScreen` |
-| `src/ui/ToolBlocks.kt` | 362 | 工具专用块渲染：read / bash（**长输出折叠**）/ edit / 通用 | `ToolCallBlock()`、`ReadBody()`、`TerminalBody()`、`DiffBody()`、`GenericBody()` | `ui/ChatScreen` |
+| `src/ui/ToolBlocks.kt` | 364 | 工具专用块渲染：**默认折叠成一行摘要**（动作短语 · 关键参数 + 状态/耗时），read / bash（**长输出折叠**）/ edit / 通用 | `ToolCallBlock()`、`ReadBody()`、`TerminalBody()`、`DiffBody()`、`GenericBody()` | `ui/ChatScreen` |
 | `src/ui/ChatPanels.kt` | 275 | 审批卡片（可代签）、**交付物卡片（一个文件一张，类型色块 + 主副标题，点击直接打开文件）**、统计一行 | `ApprovalPanel()`、**`DeliverableCard()`（一个文件一张卡）**、`fileBadge()`、`ChatStatsBar()` | `ui/ChatScreen` |
 | `src/ui/FilesScreen.kt` | 754 | 文件页：授权根 chip / 列表 / **可拖动分栏（目录 ⇄ 内容，比例可左右调）** / **按类型分流的预览**（Markdown 渲染 · 图片 · 源码 · 交系统）+ 编辑器 + 移动 | `FilesScreen()`、`RootChips()`、`FileListPane()`、`Splitter()`、`PreviewPane()`、`TypeBadge()`、`MiniAction()`、`MarkdownPreviewPane()`、`SourcePane()`、`ImagePane()`、`UnsupportedPane()` | `ui/App` |
 | `src/ui/ModelsScreen.kt` | 486 | 模型页：供应商卡片、编辑（baseURL/密钥）、发现模型、自定义 provider、全局模型目录 | `ModelsScreen()`、`ProviderCard()`、`ProviderEditor()`、`CreateProviderDialog()` | `ui/App` |
@@ -76,10 +76,10 @@
 | `tools/package.sh` | 编译 → 打 jar → jlink 精简运行时 → jpackage → **补桌面入口重打 deb**；Windows 分支出 app-image + zip（有 WiX 时另出 msi）；**`LITE=1` 出轻量包**（拿掉运行时、换成启动引导器） | `dist/dsh-desktop_<ver>-1_<arch>.deb` / `dist/dsh-desktop-lite_<ver>-1_<arch>.deb` / `dist/dsh-desktop-<ver>-windows-x64{,-lite}.zip` |
 | `tools/slim-icons.py` | 把 36 MB 的 material-icons-extended 瘦成**源码里 import 到的那 23 个图标**（白名单现抓，漏抓就是编译期 unresolved reference） | `build/app-input/material-icons-extended-*.jar`（0.05 MB） |
 | `tools/build-runtime.sh` | 把 jlink 出的运行时镜像打成 **tar.xz + sha256**（轻量包首次启动下载它；与完整包里同一份字节） | `dist/dsh-desktop-runtime-<ver>-<平台>.tar.xz{,.sha256}` |
-| `tools/launcher/dsh-desktop.sh` | **启动引导器（Linux）**：自带 runtime 优先 → 用户目录已下载的复用 → 都没有就按国内优先下载（Gitee→GitHub）并校验 sha256，解压后启动；`DSH_RUNTIME_HOME` / `DSH_RUNTIME_TARBALL` / `DSH_LAUNCHER_DRY_RUN` 兜底与诊断 | 装到 `<安装目录>/bin/dsh-desktop` |
-| `tools/launcher/dsh-desktop.bat` | 同上，Windows 版（curl.exe + tar.exe，Win10 1803+ 自带） | 装到 `<解压目录>/dsh-desktop.bat` |
+| `tools/launcher/dsh-desktop.sh` | **启动引导器（Linux）**：自带 runtime 优先 → 用户目录已下载的复用 → 都没有就按国内优先下载（Gitee→GitHub）并校验 sha256，解压后启动；**失败必弹窗 + 写 `~/.cache/dsh-desktop/launcher.log`**（`Terminal=false` 下 stderr 看不见）；`DSH_RUNTIME_HOME` / `DSH_RUNTIME_TARBALL` / `DSH_LAUNCHER_DRY_RUN` / `DSH_LAUNCHER_NO_DIALOG` 兜底与诊断 | 装到 `<安装目录>/bin/dsh-desktop` |
+| `tools/launcher/dsh-desktop.bat` | 同上，Windows 版（curl.exe + tar.exe，Win10 1803+ 自带）；日志 `%LOCALAPPDATA%\dsh-desktop\launcher.log`，双击启动失败会 `pause` | 装到 `<解压目录>/dsh-desktop.bat` |
 | `tools/fetch-platform.sh` | 拉取目标平台的 skiko 原生库：先找本地种子（`lib/` 里那份、以及历史上放在 tools 下的 Windows 那份），再走 Maven，下完用 `zipfile` 校验不是 HTML | 落进平台库里那份 `skiko-awt-runtime-<平台>-0.8.18.jar` |
-| `tools/docs-check.sh` | 文档门禁（28 项） | 退出码 0/1 |
+| `tools/docs-check.sh` | 文档门禁（30 项） | 退出码 0/1 |
 | `tools/verify-history.sh` | 真实历史解析验证（含专用块分布、耗时可算率） | 退出码 0 / 2（回归）/ 3（输入） |
 | `tools/VerifyHistory.kt` | 上面脚本的验证主体 | — |
 | `tools/verify-markdown.sh` | Markdown 解析验证：22 条内置用例 + 真实会话表格形状断言（**至少 1 张表、无空表、每行宽度等于列数**） | 退出码 0 / 2（真实数据形状不对）/ 3（输入不可用）/ 4（内置用例失败） |

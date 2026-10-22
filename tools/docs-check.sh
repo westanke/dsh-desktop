@@ -90,6 +90,10 @@ if ver and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", ver):
     check("STATUS 版本一致", f"**{ver}**" in status, f"应为 **{ver}**")
     changelog = read("docs/project/CHANGELOG-DEV.md") or ""
     check("CHANGELOG 有本版条目", f"v{ver}" in changelog, f"应为 v{ver}")
+    # 设置页「关于」里的版本号：优先读 jar manifest，读不到才用这个常量兜底
+    settings = read("src/main/kotlin/io/github/westanke/dshdesktop/ui/SettingsScreen.kt") or ""
+    check("SettingsScreen 兜底版本一致",
+          f'VERSION_FALLBACK = "{ver}"' in settings, f'应为 VERSION_FALLBACK = "{ver}"')
 
 # ── 3. PARITY 统计 ─────────────────────────────────────────────────────────
 print("▸ 3/7 PARITY 统计与表格相符")

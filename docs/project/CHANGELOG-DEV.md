@@ -5,6 +5,77 @@
 
 ---
 
+## v1.0.1 · 工具调用默认折叠（2026-10-22）
+
+### 基于什么
+
+用户一句“工具调用如手机版 默认收缩起来”，附手机版截图：一轮工具调用折成
+「耗时 8 秒 · 2 次工具调用」一行，箭头可展开。
+
+### 现状盘点（没急着改）
+
+`ChatItem.ToolGroup` 早就默认折叠（第十二轮起），但**单条**的 `ChatItem.Tool`
+初始态是 `mutableStateOf(tool.isError)`——成功的工具调用一律**展开**，把
+ReadBody / TerminalBody / DiffBody 全文铺在会话里。所以"手机版那样只有一行"
+在桌面端根本不成立：只要这一轮只调了一次工具（没有相邻兄弟可合并），就是整块展开。
+
+### 干了什么
+
+1. **`ui/ToolBlocks.kt`**：`ToolCallBlock` 的 `expanded` 初始值
+   `tool.isError` → `false`。失败也不自动展开：摘要行已有红色「失败 · 耗时」，
+   而"失败就全展开"在一轮十几次调用出错时会把整场会话冲掉。
+   注释里把这个取舍写清楚，避免以后有人当 bug 又改回去。
+2. **`data/ChatHistory.kt`**：`ToolGroup` 增加 `isRunning` 与 `totalDurationMs`
+   （`tools.mapNotNull{it.durationMs}.takeIf{it.size==tools.size}?.sum()`）。
+   缺任一条就返回 null —— 少显示一行，好过显示一个少算的数。
+   放数据层是因为它是纯函数，能被探针直接验；UI 层只负责拼字符串。
+3. **`ui/ChatScreen.kt`**：`ToolGroupBlock` 折叠行右侧加时间标签
+   （「运行中」/「耗时 8 秒」），与「含失败」并列；补 `formatToolDuration` import。
+   行内顺序：箭头 → 工具名+次数 → 耗时 → 含失败。
+4. **`data/ToolBlockView.kt`**：`formatToolDuration` 改中文整秒
+   （`350 毫秒` / `8 秒` / `2 分 5 秒` / `1 小时 1 分`），顺带去掉了
+   `String.format(Locale.US, "%.1f s")`。只有两处调用（单条状态行、组摘要），
+   影响面可控；亚秒级仍给毫秒，避免快工具显示「0 秒」误导。
+5. **版本号 1.0.0 → 1.0.1**：`version.txt`、README 产物名、本文与 `STATUS.md` 的标题一起改。
+   顺手治了一个老毛病——设置页「关于」里 `DSH Desktop 1.0.0` 是**硬编码**的，升版本就得
+   记得手改。现在改成先读 jar manifest 的 `Implementation-Version`（`build.sh` 打 jar 时
+   从 `version.txt` 写入），读不到（直接跑 `build/classes`）才回落常量 `VERSION_FALLBACK`；
+   `tools/docs-check.sh` 新增一条「SettingsScreen 兜底版本一致」，常量漂了 CI 直接红。
+6. **`tools/launcher/dsh-desktop.sh`（真机报障后重写）**：用户装轻量包点图标
+   "无法打开，无任何提示"。手动 dry-run 复现：v1.0.0 发行版里没有运行时资产，
+   Gitee/GitHub 双双 404；而 `.desktop` 写的是 `Terminal=false`，`echo >&2` 全进黑洞。
+   - 新增 `log()`：`~/.cache/dsh-desktop/launcher.log`，每次启动记版本 / APP_HOME / 选中的 java；
+   - 新增 `dialog()`：`zenity → kdialog → xmessage → notify-send`，**都带 60 秒超时**
+     （`xmessage` 没人点会一直不返回，第一次写没加超时，测试直接被吊死）；
+     `[ -t 2 ]` 不弹；`DSH_LAUNCHER_NO_DIALOG=1` 完全静默给测试用；
+   - 新增 `fail()`：stderr + 日志 + 弹窗，下载失败时把 `DSH_RUNTIME_HOME` /
+     `DSH_RUNTIME_TARBALL` 两种手动兜底和发行版地址一起写进弹窗；
+   - **不再 `exec java`**：前台跑拿退出码，`1..128` 才报「异常退出」（128+ 是信号，
+     注销时不该弹"启动失败"）；无终端时 java 的 stderr 追加进日志。
+7. **`tools/launcher/dsh-desktop.bat` 同构**：日志 `%LOCALAPPDATA%\dsh-desktop\launcher.log`，
+   java 非零退出提示日志路径，双击启动（`cmdcmdline` 含 `/c`）时 `pause` 停住。
+
+### 测了什么
+
+- `tools/build.sh` 通过（含 `ChatHistory` 的 `Long?` 聚合表达式）。
+- Java 探针对 `ChatItem.ToolGroup` + `formatToolDuration` 直接打桩 **16/16**：
+  合计耗时、缺耗时置 null、`isRunning`、空组、`hasError`、>4 工具名标题、
+  四档单位。探针只依赖 `build/classes` + kotlin-stdlib，跑在 `build/tmp/probe`（不入库）。
+- `tools/docs-check.sh` **30/30**（新增版本兜底那条；CODEMAP 行数与接口表同步更新过）。
+- 引导器四条路径（`DSH_LAUNCHER_NO_DIALOG=1`）：404 双源 → 退出 1 + 完整提示 + 日志；
+  本地 tar 包 → 解压并命中；再跑一次 → 命中缓存不重下；java 退出码 3 → 报异常退出。
+  日志开头能看到 `APP_HOME` / `java=` 两行，够定位"用了哪个运行时"。
+- 轻包解包核对：`lib/runtime` 不存在、`VERSION=1.0.1`、`bin/dsh-desktop` 与
+  `tools/launcher/dsh-desktop.sh` sha256 一致。
+
+### 没做的 / 风险
+
+- 点击展开是 Compose 内部状态，沙箱无 GUI 验不了；只能保证初始 `false`。
+- 组耗时是"逐条相加"，并行工具（同一轮多个 tool/call 并发）会高估——目前
+  内核按串行派发，暂不处理；真要精确得用首尾 seq 的 wall-clock span。
+
+---
+
 ## v1.0.0 第十五轮 · 安装包瘦身：94 → 68 / 40 MB（2026-10-22）
 
 ### 基于什么

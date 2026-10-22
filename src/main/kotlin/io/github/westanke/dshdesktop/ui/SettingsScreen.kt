@@ -40,6 +40,21 @@ import androidx.compose.ui.unit.sp
 import io.github.westanke.dshdesktop.AppState
 import io.github.westanke.dshdesktop.ConnectionState
 
+/**
+ * 关于页显示的版本号，兜底值。
+ *
+ * 优先取 jar manifest 的 `Implementation-Version`（`tools/build.sh` 打 jar 时写入，
+ * 跟着 `version.txt` 走）；直接跑 `build/classes` 时读不到 manifest，才回落这个常量。
+ * 常量由 `tools/docs-check.sh` 与 `version.txt` 对齐，漂了 CI 会红。
+ */
+private const val VERSION_FALLBACK = "1.0.1"
+
+// 拿 manifest 得有一个类做锚点：`SettingsScreen` 是函数不是类，这里借 AppState（同一个 jar）
+private val appVersion: String by lazy {
+    AppState::class.java.`package`?.implementationVersion?.takeIf { it.isNotBlank() }
+        ?: VERSION_FALLBACK
+}
+
 @Composable
 fun SettingsScreen(state: AppState) {
     val colors = LocalAppColors.current
@@ -178,7 +193,7 @@ fun SettingsScreen(state: AppState) {
             AppCard(Modifier.fillMaxWidth()) {
                 SectionLabel("关于")
                 Spacer(Modifier.height(10.dp))
-                InfoRow("客户端", "DSH Desktop 1.0.0 · Compose Desktop（Skia 原生渲染）")
+                InfoRow("客户端", "DSH Desktop $appVersion · Compose Desktop（Skia 原生渲染）")
                 InfoRow("运行环境", "${System.getProperty("os.name")} · JDK ${System.getProperty("java.version")}")
                 InfoRow("协议", "dsh-remote-bridge REST /api/v1 + WebSocket /api/v1/events")
                 InfoRow("配置目录", io.github.westanke.dshdesktop.data.AppStorage.root().toString(), mono = true)

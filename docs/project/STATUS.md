@@ -1,8 +1,54 @@
 # 状态（STATUS）
 
 - 日期：**2026-10-22**
-- 版本：**1.0.0**（`v1.0.0` tag 已发；Release 由 GitHub 现场构建，产物已**同步回 Gitee 主源**）
+- 版本：**1.0.1**（`v1.0.1` tag 打进；1.0.0 的 Release 由 GitHub 现场构建，产物已**同步回 Gitee 主源**）
 - 平台：UOS / Deepin x64 与 arm64（deb）、Windows x64（zip + msi）
+
+---
+
+## v1.0.1 · 工具调用默认折叠成一行（2026-10-22）
+
+**基于什么**：用户一句「工具调用如手机版 默认收缩起来」，配一张手机版截图
+（DSH伴侣 App：一轮工具调用折叠成「耗时 8 秒 · 2 次工具调用」一行，点箭头才展开）。
+
+**干了什么**
+
+1. **单条工具调用一律默认折叠**（`ui/ToolBlocks.kt`）：`ToolCallBlock` 的初始 `expanded`
+   从 `tool.isError` 改为 `false`。原先"失败默认展开"是想省一次点击，但一轮连调十几次
+   工具、其中一条报错时，整屏铺满展开的失败块，助手正文直接被挤走。现在一致地先收敛成
+   一行——摘要行上已经有红色「失败 · 耗时」，异常不会被藏起来。
+2. **组摘要补耗时**（`data/ChatHistory.kt` + `ui/ChatScreen.kt`）：`ToolGroup` 新增
+   `totalDurationMs`（逐条 `durationMs` 求和，缺任一条即为 null）与 `isRunning`；
+   `ToolGroupBlock` 折叠行右侧显示「耗时 8 秒」或「运行中」，形态对齐手机版截图。
+   组标题仍是去重工具名 + 次数（+「含失败」）。
+3. **耗时改成中文单位**（`data/ToolBlockView.kt`）：`formatToolDuration` 从 `1.2 s` /
+   `2m 5s` 改为 `8 秒` / `2 分 5 秒` / `350 毫秒`；亚秒级仍给毫秒，免得快工具被念成「0 秒」。
+4. **修轻量包"点了没反应"**（真机报障）：根因是 v1.0.0 发行版里**没有运行时资产**，
+   引导器两次 404；而 `.desktop` 是 `Terminal=false`，错误全进了黑洞。启动器改成
+   统一 `fail()`：日志（`~/.cache/dsh-desktop/launcher.log`）+ 弹窗
+   （zenity → kdialog → xmessage → notify-send，均带 60 秒超时）+ 可操作的手动兜底地址；
+   并去掉 `exec java`，前台取退出码，`1..128` 才报"异常退出"。Windows bat 同构
+   （日志 + 双击场景 `pause`）。
+
+**测了什么**
+
+- `tools/build.sh` 通过。
+- Java 探针（`build/tmp/probe/ProbeToolGroup.java`，本地临时、不入库）**16 项全过**：
+  3s+5s → 8000 ms → 摘要「耗时 8 秒」；缺一条耗时 → null（宁可少一行也不给少算的数）；
+  有在跑 → `isRunning` 且不显示耗时；空组不炸、标题仍是「0 次工具调用」；
+  6 种工具名折叠成「read、bash、edit、write 等 6 次」；`formatToolDuration` 四档单位。
+- `tools/docs-check.sh` **30/30**（新增「SettingsScreen 兜底版本一致」）。
+- 版本 1.0.0 → **1.0.1**：设置页「关于」的版本号改为读 jar manifest，读不到才用常量兜底。
+- 启动器四条路径实测（`DSH_LAUNCHER_NO_DIALOG=1`）：① 两个源都 404 → 退出码 1 +
+  完整提示 + 日志有记录 ② `DSH_RUNTIME_TARBALL` 本地包 → 解压后 dry-run 指到它
+  ③ 再跑一次命中已解压目录，不再下载 ④ java 退出码 3 → 报「客户端异常退出」。
+  轻包 `dsh-desktop-lite_1.0.1-1_amd64.deb` 解包核对：无 `lib/runtime`、
+  `VERSION=1.0.1`、`bin/dsh-desktop` 与仓库源 sha256 一致。
+
+**没做的**
+
+- 「默认折叠」是 Composable 内部状态，headless 沙箱验不了"点一下能展开"——
+  要 GUI 真机看一眼（沙箱里 skiko so 起不来）。
 
 ---
 
