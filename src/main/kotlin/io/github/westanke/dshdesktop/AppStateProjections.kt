@@ -133,18 +133,22 @@ fun AppState.loadPermissionCatalog() {
  * 走斜杠命令 `/permission <preset>` 而不是 PUT：内核把权限做成**会话级命令**，
  * 桥接没有单独的权限写入端点（`dsh-remote-bridge` 里也只有 `chat/permission-presets` 这个只读目录）。
  * 安卓端同样是发命令，两个客户端切档位的行为必须一致。
+ *
+ * [sessionId] 默认打当前选中的会话；新建会话预选档位（P3）时显式传新会话的 id——
+ * 那会儿它还没被选中，不能顺手把正文切成它的。
  */
-fun AppState.applyPermissionPreset(preset: String) {
-    val sessionId = selectedSessionId ?: return
+fun AppState.applyPermissionPreset(preset: String, sessionId: String? = null) {
+    val target = sessionId ?: selectedSessionId ?: return
     if (preset.isBlank()) return
     scope.launch {
         runCatching {
-            withContext(Dispatchers.IO) { client().executeSessionCommand(sessionId, "/permission $preset") }
+            withContext(Dispatchers.IO) { client().executeSessionCommand(target, "/permission $preset") }
         }.onSuccess {
             val label = permissionState?.options?.firstOrNull { it.value == preset }?.name ?: preset
             showToast("权限已切到 $label")
-            // 投影是命令执行后由内核改的，必须重取历史才看得见新值
-            loadHistory(sessionId)
+            // 投影是命令执行后由内核改的，必须重取历史才看得见新值；
+            // 但非当前会话不能重取——那会把正在看的正文盖掉
+            if (target == selectedSessionId) loadHistory(target)
         }.onFailure { showToast("切换失败：${AppState.human(it)}") }
     }
 }

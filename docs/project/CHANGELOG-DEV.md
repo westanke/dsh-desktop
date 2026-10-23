@@ -5,6 +5,36 @@
 
 ---
 
+## 开发中 · 第二批对标 companion 2.2.52（P2-1 / P2-2 / P3，未打 tag）
+
+### 基于什么
+
+`docs/project/inbox/2026-10-23-batch2-settings-update-permission.md` 交接单：lead 对着
+`PARITY-VS-COMPANION-2.2.52.md` 找了三个差距——通用设置命名空间表单、应用内检查更新、
+新建会话选权限档位。约定"只写代码对齐、不推送不打 tag"，每项过共同门禁。
+
+### 干了什么（P3 · 新建会话即选权限档位）
+
+- `data/SessionProjections.kt` 新增纯函数 `resolveNewSessionPreset()`：目录没到 /
+  只有一个档位 / 选的值不在目录里 / 解析结果等于部署默认 —— 四种情况都返回 null
+  （不多发一条 `/permission`，也不画一排拨了没反应的开关）。
+- `AppState.createSession(workspaceId, preset)`：建完**顺序**等 `reloadSessions()`
+  （从 `refreshSessions()` 拆出的 suspend 版），用**差集**认出新会话——
+  响应体形状没在 OpenAPI 里写死，不猜。差集认到才对它发档位命令。
+- `AppStateProjections.applyPermissionPreset(preset, sessionId)`：显式指定会话时
+  **不重取历史**（会盖掉正在看的正文）；其余仍是原来那条 `/permission` 通路。
+- `ui/Sidebar.kt`：「新会话」下拉顶部一排档位胶囊（候选 = `permissionCatalog`，
+  与输入区权限 Pill 同源），菜单展开时按需拉目录；老桥 / 单档位整块不画。
+
+### 测了什么
+
+- `build.sh` 编译通过；新增 `tools/verify-parity.sh`（8 项档位判定用例）；
+  `docs-check.sh` 30/30；CODEMAP / PARITY / ROADMAP 已同步。
+- **未真机验证**：档位胶囊是否随目录刷新、建完真机权限是否即时为新档
+  （要连真 bridge 看投影，不是只看 toast）。
+
+---
+
 ## v1.0.2 · 消息流对齐官方 Web + 自由复制/引用 + 对标 companion 2.2.52 第一批（2026-10-23）
 
 ### 基于什么

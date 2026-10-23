@@ -491,33 +491,39 @@ class AppState(
     // ── 会话 ────────────────────────────────────────────────────────────────
 
     fun refreshSessions() {
-        scope.launch {
-            runCatching { withContext(Dispatchers.IO) { client().listChatSessions(showArchived) } }
-                .onSuccess { list ->
-                    sessionsError = null
-                    sessions = list
-                    // 上次选中的会话可能已被归档/删除
-                    val current = selectedSessionId
-                    if (current != null && list.none { it.id == current }) selectedSessionId = null
-                    when {
-                        selectedSessionId == null -> list.firstOrNull()?.let { selectSession(it.id) }
-                        // 冷启动时 lastSessionId 是从偏好里恢复的，此时正文与模型目录都还没拉过；
-                        // 只恢复"选中态"而不拉数据，界面会是一片空白（踩过）。
-                        chatItems.isEmpty() -> {
-                            selectedSessionId?.let { id ->
-                                loadHistory(id)
-                                loadModels(id)
-                                loadApprovals(id)
-                                loadCommands(id)
-                            }
+        scope.launch { reloadSessions() }
+    }
+
+    /**
+     * 拉一次会话列表并维护选中态。拆成 suspend 是为了让"建完会话马上要用新列表"
+     * 的调用方（[createSession]）能顺序拿到结果，而不是赌一次异步谁先谁后。
+     */
+    private suspend fun reloadSessions() {
+        runCatching { withContext(Dispatchers.IO) { client().listChatSessions(showArchived) } }
+            .onSuccess { list ->
+                sessionsError = null
+                sessions = list
+                // 上次选中的会话可能已被归档/删除
+                val current = selectedSessionId
+                if (current != null && list.none { it.id == current }) selectedSessionId = null
+                when {
+                    selectedSessionId == null -> list.firstOrNull()?.let { selectSession(it.id) }
+                    // 冷启动时 lastSessionId 是从偏好里恢复的，此时正文与模型目录都还没拉过；
+                    // 只恢复"选中态"而不拉数据，界面会是一片空白（踩过）。
+                    chatItems.isEmpty() -> {
+                        selectedSessionId?.let { id ->
+                            loadHistory(id)
+                            loadModels(id)
+                            loadApprovals(id)
+                            loadCommands(id)
                         }
                     }
                 }
-                // 以前这里是空的 onFailure。结果是：接口一失败，左栏就空着，
-                // 用户看到"会话打开无任何显示"却拿不到任何线索（真机 2026-10-21 报障）。
-                // 列表失败必须说话——它是"整页空白"最常见的那条路径。
-                .onFailure { sessionsError = human(it) }
-        }
+            }
+            // 以前这里是空的 onFailure。结果是：接口一失败，左栏就空着，
+            // 用户看到"会话打开无任何显示"却拿不到任何线索（真机 2026-10-21 报障）。
+            // 列表失败必须说话——它是"整页空白"最常见的那条路径。
+            .onFailure { sessionsError = human(it) }
     }
 
     /**
@@ -788,14 +794,27 @@ class AppState(
         }
     }
 
-    fun createSession(workspaceId: String) {
+    /**
+     * 新建会话；[preset] 非空时建完立刻把权限切到该档（P3：新建即选档位）。
+     *
+     * 档位通过 [applyPermissionPreset] 的同一条 `/permission` 命令通路生效，
+     * 不新造语义。目标会话用**差集**认：响应体形状没在 OpenAPI 里写死，
+     * 而"列表里多出来的那个"是一定可靠的。
+     */
+    fun createSession(workspaceId: String, preset: String? = null) {
         scope.launch {
+            val before = sessions.mapTo(HashSet()) { it.id }
             runCatching {
                 withContext(Dispatchers.IO) {
                     client().createSessionInWorkspace(workspaceId, UUID.randomUUID().toString())
                 }
             }.onSuccess {
-                refreshSessions()
+                // 直接调 suspend 版：下面要用"刷完之后"的列表做差集认新会话
+                reloadSessions()
+                val created = sessions.firstOrNull { it.id !in before }?.id
+                if (created != null && !preset.isNullOrBlank()) {
+                    applyPermissionPreset(preset, created)
+                }
                 showToast("已新建会话")
             }.onFailure { showToast(human(it)) }
         }

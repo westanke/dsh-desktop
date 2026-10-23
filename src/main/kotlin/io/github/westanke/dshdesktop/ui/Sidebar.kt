@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,7 +71,9 @@ import io.github.westanke.dshdesktop.ConnectionState
 import io.github.westanke.dshdesktop.Nav
 import io.github.westanke.dshdesktop.data.ChatSession
 import io.github.westanke.dshdesktop.data.ChatWorkspace
+import io.github.westanke.dshdesktop.data.resolveNewSessionPreset
 import io.github.westanke.dshdesktop.deleteWorkspace
+import io.github.westanke.dshdesktop.loadPermissionCatalog
 import io.github.westanke.dshdesktop.renameWorkspace
 import io.github.westanke.dshdesktop.forkSession
 import java.text.SimpleDateFormat
@@ -93,6 +96,9 @@ fun Sidebar(state: AppState) {
     var showNew by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<ChatSession?>(null) }
     var renamingWs by remember { mutableStateOf<ChatWorkspace?>(null) }
+    // 新建会话时预选的权限档位（P3）；null = 用部署默认。候选与输入区权限 Pill
+    // 是同一份目录，不在这里硬编码第二套名单。
+    var pendingPreset by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.workspaces.isEmpty()) {
         if (state.workspaces.isEmpty()) state.refreshWorkspaces()
@@ -117,7 +123,50 @@ fun Sidebar(state: AppState) {
         // 通栏「新会话」：官方是整条按钮，比图标更像入口
         Box(Modifier.padding(horizontal = 12.dp)) {
             NewSessionButton(enabled = !state.showArchived, onClick = { showNew = true })
+            // 菜单一开就把权限目录要过来：Pill 那边是按需拉的，这里等用户点开再要一次，
+            // 老桥拿不到目录时下面那段选择器整块不画，零打扰
+            LaunchedEffect(showNew) { if (showNew) state.loadPermissionCatalog() }
             DropdownMenu(expanded = showNew, onDismissRequest = { showNew = false }) {
+                // P3：新建即选档位。只有"目录里有多个档位"时才值得选，
+                // 单个档位画一排拨了没反应的开关纯属噪音
+                val presetChoices = remember(state.permissionCatalog) {
+                    state.permissionCatalog?.options
+                        ?.map { it.value to it.name }
+                        ?.takeIf { it.size > 1 }
+                        ?: emptyList()
+                }
+                if (presetChoices.isNotEmpty()) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                        Text(
+                            "新建后使用权限档位",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textTertiary,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            presetChoices.forEach { (value, name) ->
+                                val on = value == pendingPreset
+                                FilterChip(
+                                    selected = on,
+                                    onClick = { pendingPreset = if (on) null else value },
+                                    label = {
+                                        Text(
+                                            name,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        Text(
+                            "不选则用部署默认档",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.textTertiary,
+                        )
+                    }
+                    HorizontalDivider(color = colors.hairline)
+                }
                 if (state.workspaces.isEmpty()) {
                     DropdownMenuItem(
                         text = { Text("没有可用的工作区", style = MaterialTheme.typography.bodySmall) },
@@ -133,7 +182,10 @@ fun Sidebar(state: AppState) {
                             .fillMaxWidth()
                             .clickable {
                                 showNew = false
-                                state.createSession(workspace.id)
+                                state.createSession(
+                                    workspace.id,
+                                    resolveNewSessionPreset(state.permissionCatalog, pendingPreset),
+                                )
                             }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,

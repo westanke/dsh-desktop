@@ -1,5 +1,6 @@
 package io.github.westanke.dshdesktop.data
 
+import io.github.westanke.dshdesktop.data.PermissionCatalog
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -72,6 +73,25 @@ private val KNOWN_PRESET_LABELS = mapOf(
 )
 
 private fun knownPresetLabel(value: String): String = KNOWN_PRESET_LABELS[value] ?: value
+
+/**
+ * 新建会话时该不该显式切档、切到哪个（P3）。
+ *
+ * 纯函数，给 UI 与回归用例共用：
+ * - 目录没到 / 只有一个档位 → null（没什么可选的，画选择器纯属噪音）；
+ * - 没选 → 部署默认；选的值不在目录里 → 当作没选（目录可能刚刷新过）；
+ * - **解析结果等于部署默认时也返回 null**：会话建出来就是默认档，
+ *   多发一条 `/permission` 只会多一句"权限已切到默认档"的打扰。
+ */
+fun resolveNewSessionPreset(catalog: PermissionCatalog?, picked: String?): String? {
+    if (catalog == null) return null
+    val values = catalog.options.mapTo(HashSet()) { it.value }
+    if (values.size <= 1) return null
+    val chosen = picked?.takeIf { it in values }
+        ?: catalog.defaultPreset.takeIf { it in values }
+        ?: return null
+    return chosen.takeIf { it != catalog.defaultPreset }
+}
 
 /**
  * 轨迹里的一个事件节点。`kind` 是事件类型原文，UI 直接显示，不翻译成猜的名字。

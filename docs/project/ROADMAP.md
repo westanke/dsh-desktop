@@ -48,6 +48,12 @@
 | CHAT-016 | in-progress | 按轮折叠 TurnRun（「已完成，用时 X ⌄」）+ 用户气泡时间/复制/引用 + 统计居中 + 消息区细滚动条。**待真机验收** |
 | CHAT-017 | in-progress | 正文 Markdown 图片（`MdBlock.Image` + `PathImage()`，http/未知/行内图降级链接）；自由选择复制 + 上下文注入显示开关（设置，默认关）。**待真机验收** |
 | CHAT-018 | in-progress | 文件链接应用内定位 + 行号后缀（`:24`/`#L24`）+ `SourcePane` 按行高亮；刷新历史增量合并（`mergeLatestPage`）不抹更早页。**待真机验收** |
+| CHAT-019 | in-progress | P3 新建会话预选权限档位：「新会话」下拉里一排档位胶囊（候选与权限 Pill 同源），
+    建完对**新会话**发 `/permission <preset>`（差集认会话，不猜响应体）；等于部署默认时不发命令。**待真机验收** |
+| CHAT-020 | planned | P2-2 应用内检查更新：按界面语言分流 Gitee/GitHub，版本逐段比较，下载后 SHA-256 校验，
+    只给安装指引不做热自更新 |
+| CHAT-021 | planned | P2-1 schema 驱动的设置命名空间表单（bridge v2.6.0 `settings/namespaces`，
+    schemastery 摊平 + 密钥只读 + 409 就地重拉） |
 
 ## 四、文件
 
