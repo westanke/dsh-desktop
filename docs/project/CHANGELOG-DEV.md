@@ -1057,3 +1057,7 @@ Agent Preset、TODO、轨迹、工作区管理、能力探测、Provider 页、�
 4GB 地址空间导致 Gradle 起不来、`jar` 建线程失败、`TMPDIR` 对 jpackage 无效、
 skiko 解压原生库失败、`core-runtime` 在 aar 里、`rm` 被 genie-trash 拦截、
 冷启动会话空白、折叠箭头字符退化成圆点。全部已进 `PITFALLS.md`。
+
+**收尾结果**：Gitee 发行版最终 14 个资产齐了，且与 GitHub 逐字节一致（SHA256SUMS 可用）。
+路上还撞到 **Gitee 仓库附件 1 GB 总配额**（装到 arm64 deb 时 HTTP 400 报配额），
+删掉最旧的 v1.0.0 发行版腾位——历史版本以 GitHub 为准，Gitee 只保留最新一个完整版本。
