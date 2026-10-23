@@ -15,7 +15,7 @@
 - **P0-1 ✓** `mergeLatestPage()` + 视口贴底跟随/翻页锚定；`verify-history.sh` 有合并回归。
 - **P1-1 ✓** `MdBlock.Image` / `parseImageMarkdown()` / `PathImage()`；降级口径与本文一致（http 图、未知扩展名、行内图→链接；上下文注入不走 MarkdownText 天然隔离）。
 - **P1-2 ✓** `data/ChatLink.kt` `classifyChatLink()` + `openFileByPath(path, line)`；`SourcePane` 按行渲染可定位高亮。
-- **P2-1 / P2-2 / P3** 未动，排第二批。
+- **P2-1 / P2-2 / P3** 未动，排第二批。**第二批需求通知（自包含交接单，含协议/APP 源路径/验收/门禁）已发**：[`inbox/2026-10-23-batch2-settings-update-permission.md`](inbox/2026-10-23-batch2-settings-update-permission.md)，待 workbuddy 实现。
 
 发版时把下方「差距清单」对应项回填进 `PARITY.md` 矩阵（基准改 v2.2.52）并并表。
 
@@ -81,7 +81,7 @@ v2.2.44 之后 APP 一共发了 8 个版本，与桌面端相关的变化可分�
 
 **P2-1 · schema 驱动通用设置命名空间表单**
 - 依赖：桥 v2.6.0 的 `GET /settings/namespaces`、`PATCH /settings/namespaces/{ns}`（桌面端 `data/` 完全没接）。
-- 价值：装任何插件都能自动出设置表单，不用改客户端。APP 已有 `SettingsNamespaces.kt`（enum/boolean/number/string/只读 JSON 五控件、密钥位只读、`expectedRevision` 412 就地重拉），桌面端可平移成 Compose 表单。
+- 价值：装任何插件都能自动出设置表单，不用改客户端。APP 已有 `SettingsNamespaces.kt`（控件六类 Enum/Boolean/Number/Text/Secret/ReadOnly、密钥位只读不提交、内核 schema 实为 **schemastery** 引用图需摊平、`expectedRevision` 冲突 **409 `SETTINGS_CONFLICT`** 就地重拉——早期草稿误写成 412，以此为准），桌面端可平移成 Compose 表单。
 - 降级三层必须照搬：数据层 runCatching 静默、状态层 null 不画入口（老桥零变化）、手动刷新 404/403 静默但 503 报错。
 - 建议：等真机确认桥已是 v2.6.0 再做；做时按 `@patch`/能力位规矩，老桥不显示入口。
 

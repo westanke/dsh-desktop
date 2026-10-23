@@ -34,6 +34,11 @@
 推 Gitee main + `v1.0.2` tag → mirror 到 GitHub → `release.yml` 三平台构建 →
 GitHub Release + Gitee 发行版（`sync-release-to-gitee` / mirror-sync 补）。
 
+**发版当场的红**：`publish` job 15 分钟到点被 cancel——GitHub 跑机往 Gitee 传附件整段卡死，
+14 个资产一个没传上去（GitHub 侧 14 个齐全）。修法见 `RELEASE.md` ⑥′：
+`sync-release-to-gitee.py` 改为单件超时（240s）+ 重试 3 次（4xx 不重试）、上传前先打日志，
+`publish` 超时放到 40 分钟；补发走 `gh workflow run mirror-sync.yml --ref main`。
+
 ---
 
 ## v1.0.1 后续 3 · 第一批对标 companion 2.2.52（2026-10-23，未打 tag）

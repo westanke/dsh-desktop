@@ -18,6 +18,8 @@
     GITHUB_TOKEN   读 GitHub Release 用（Actions 里给 secrets.GITHUB_TOKEN）
     GITEE_TOKEN    Gitee 私人令牌（需 repo 权限，能建发行版与传附件）
     GITHUB_REPOSITORY / GITEE_REPO   形如 owner/name
+    GITEE_UPLOAD_TIMEOUT    单个附件上传超时秒数，默认 240
+    GITEE_UPLOAD_ATTEMPTS   单个附件最多试几次，默认 3
 
 退出码：0 全部就位；1 有资产没传上去（附件超限、令牌无效等）。
 """
@@ -28,6 +30,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from typing import List, Optional
@@ -35,6 +38,9 @@ from typing import List, Optional
 API_GITHUB = "https://api.github.com"
 API_GITEE = "https://gitee.com/api/v5"
 CHUNK = 1 << 20
+# 单个附件的超时与重试次数：Gitee 侧偶尔整段卡死，卡一次就换一次，别拖垮整个 job
+UPLOAD_TIMEOUT = int(os.environ.get("GITEE_UPLOAD_TIMEOUT", "240"))
+UPLOAD_ATTEMPTS = max(1, int(os.environ.get("GITEE_UPLOAD_ATTEMPTS", "3")))
 # 自己不算自己：否则校验文件里会多出一条 SHA256SUMS 指向它自己，
 # 用户 sha256sum -c 时会看到 "computed checksum did NOT match"（它算的是写入前的旧内容）。
 SUMS_NAME = "SHA256SUMS"
@@ -99,12 +105,16 @@ def download(url: str, dest: str, token: str):
             out.write(buf)
 
 
-def upload_attachment(repo: str, release_id: int, path: str, token: str):
+def upload_attachment(repo: str, release_id: int, path: str, token: str, timeout: int = 240):
     """上传一个附件。
 
     踩过的坑：Gitee 的 API 文档写附件字段叫 file[]，但实际只认 file——
     用 file[] 时不管令牌放表单还是放 URL，一律回 400 {"messages":["file is invalid"]}，
     而且连几 KB 的文本文件都拒，很容易误判成"文件太大"。
+
+    另一个坑（v1.0.2 发版踩过）：GitHub 的跑机往 Gitee 传附件偶尔会**整段卡死**，
+    一个 38 MB 的包传到 15 分钟都没返回，把整个 job 拖到超时被 cancel，一个附件都没落地。
+    所以超时不能给 900 秒（那是 job 级预算），要按单个附件给，卡住就换一次重来。
     """
     boundary = "----gitee-upload-boundary"
     name = os.path.basename(path)
@@ -132,7 +142,7 @@ def upload_attachment(repo: str, release_id: int, path: str, token: str):
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=900) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read()
     return json.loads(raw) if raw else {}
 
@@ -260,6 +270,7 @@ def main() -> int:
         log(f"▸ 已建 Gitee 发行版 {args.tag}（id={release_id}）")
 
     # ── 3. 逐个上传，同名的跳过（幂等）────────────────────────────────────
+    # 单件超时 + 重试：卡死的那一次只浪费 timeout 秒，不会把整个 job 拖垮
     failed = []
     for path in files:
         name = os.path.basename(path)
@@ -268,15 +279,29 @@ def main() -> int:
             # 所以重跑就跳过，保证幂等：新 tag 才是一份全新的发行版。
             log(f"· 已有同名附件，跳过 {name}")
             continue
-        try:
-            upload_attachment(gitee_repo, release_id, path, gitee_token)
-            log(f"✓ 已上传 {name}（{os.path.getsize(path) // 1048576} MB）")
-        except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")[:300]
-            log(f"✗ 上传失败 {name}：HTTP {e.code} {detail}")
-            failed.append(name)
-        except OSError as e:
-            log(f"✗ 上传失败 {name}：{e}")
+        size_mb = os.path.getsize(path) / 1048576
+        ok = False
+        for attempt in range(1, UPLOAD_ATTEMPTS + 1):
+            # 先打日志再发请求：卡住时日志正好停在"正在传 谁"，一眼看出是谁噎住了
+            log(f"↑ 上传 {name}（{size_mb:.1f} MB）· 第 {attempt}/{UPLOAD_ATTEMPTS} 次")
+            try:
+                upload_attachment(gitee_repo, release_id, path, gitee_token, UPLOAD_TIMEOUT)
+                log(f"✓ 已上传 {name}")
+                ok = True
+                break
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode("utf-8", "replace")[:300]
+                log(f"✗ 上传失败 {name}：HTTP {e.code} {detail}")
+                if e.code < 500:      # 4xx 是请求本身不对，重试也没用
+                    break
+            except OSError as e:
+                # socket.timeout / URLError / 连接被对端掐断都落在这里
+                log(f"✗ 上传失败 {name}：{e.__class__.__name__}: {e}")
+            if attempt < UPLOAD_ATTEMPTS:
+                wait = 5 * attempt
+                log(f"   {wait}s 后重试 {name}")
+                time.sleep(wait)
+        if not ok:
             failed.append(name)
 
     if failed:

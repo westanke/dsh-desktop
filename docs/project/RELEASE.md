@@ -119,6 +119,24 @@ curl -sL https://gitee.com/westanke/dsh-desktop/releases/download/v1.0.0/SHA256S
   | sha256sum -c - --ignore-missing   # 或逐个 curl | sha256sum 比对
 ```
 
+**踩过的坑（v1.0.2）**：GitHub 的跑机往 Gitee 传附件会整段卡死——一个 38 MB 的包
+传到 15 分钟没返回，把 `publish` job 拖到超时被 cancel。结果 GitHub Release 14 个资产齐全，
+Gitee 一个都没落地，而 job 状态是红的。现在的处置：
+
+- 脚本按**单个附件**给超时（`GITEE_UPLOAD_TIMEOUT`，默认 240 秒）并重试
+  （`GITEE_UPLOAD_ATTEMPTS`，默认 3 次，4xx 不重试），一个包噎住不影响其余；
+- `publish` job 超时从 15 分钟放到 40 分钟；
+- Gitee 那一步失败只 warning、不判红——GitHub Release 已经是可交付物。
+
+所以看到 `publish` 黄了**先查 Gitee 资产数**，缺就补一次（不用重打 tag）：
+
+```sh
+gh workflow run mirror-sync.yml --ref main     # 它的 releases job 会把最新 Release 搬过去
+```
+
+`gh run view <id>` 里 releases job 的日志会逐件打 `↑ 上传 … / ✓ 已上传 …`，
+卡在谁身上一眼可见。
+
 ## ⑦ 交付清单
 
 给用户时说清三件事，别只说"修好了"：
