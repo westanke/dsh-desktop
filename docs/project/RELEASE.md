@@ -125,8 +125,10 @@ Gitee 一个都没落地，而 job 状态是红的。现在的处置：
 
 - 脚本按**单个附件**给超时（`GITEE_UPLOAD_TIMEOUT`，默认 240 秒）并重试
   （`GITEE_UPLOAD_ATTEMPTS`，默认 3 次，4xx 不重试），一个包噎住不影响其余；
+- 先查 Gitee 已有附件，**只下载缺的那几个**（否则每次补跑都白拖 500 MB）；
 - `publish` job 超时从 15 分钟放到 40 分钟；
-- Gitee 那一步失败只 warning、不判红——GitHub Release 已经是可交付物。
+- Gitee 那一步失败只 warning、不判红——GitHub Release 已经是可交付物；
+  定时补缺的 `mirror-sync` releases job 也带 `GITEE_SOFT_FAIL=1`，缺件只出 warning。
 
 所以看到 `publish` 黄了**先查 Gitee 资产数**，缺就补一次（不用重打 tag）：
 

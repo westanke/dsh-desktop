@@ -84,6 +84,9 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_REPO: westanke/dsh-desktop
           PYTHONUTF8: '1'
+          # 补缺是尽力而为：Gitee 传附件会卡死，缺件出 warning 即可，
+          # 别让每 3 小时的定时任务整片染红（发版主路径 release.yml 仍然判红）
+          GITEE_SOFT_FAIL: '1'
         run: |
           set -euo pipefail
           if [ -z "${GITEE_TOKEN:-}" ]; then

@@ -206,9 +206,12 @@ def main() -> int:
         log("::error::环境变量 GITEE_TOKEN 未设置（需要能建发行版、传附件的 Gitee 令牌）")
         return 1
 
-    # ── 1. 拿到要上传的文件 ──────────────────────────────────────────────
+    # ── 1. 先把两边的"账"对上：Gitee 上已经有什么，就不用再下载 ──────────
+    # 之前是先整包下载再逐件比对，结果每次补跑都要从 GitHub 拖 500 MB，
+    # 只为发现"这些早就传过了"。现在先查 Gitee，只下缺的那几个。
     work = tempfile.mkdtemp(prefix="gitee-release-")
     files: List[str] = []
+    rel = None
     if args.local:
         files = collect_local(args.local, args.include, args.tag)
         if not files:
@@ -222,29 +225,9 @@ def main() -> int:
             log(f"::error::读不到 GitHub Release {args.tag}：{e.code} {e.reason}")
             return 1
         body = (rel.get("body") or "").strip() or "由 GitHub Actions 构建。"
-        for asset in rel.get("assets", []):
-            # --include 在下载前就过滤：省得把 90 MB 的 deb 拉下来只为跳过它
-            if args.include and not any(
-                fnmatch.fnmatch(asset["name"], pat) for pat in args.include
-            ):
-                log(f"· 跳过不匹配 --include 的资产 {asset['name']}")
-                continue
-            dest = os.path.join(work, asset["name"])
-            log(f"↓ 下载 {asset['name']} · {asset['size'] // 1048576} MB")
-            download(asset["url"], dest, gh_token)
-            files.append(dest)
-        if not files:
+        if not rel.get("assets"):
             log(f"::error::GitHub Release {args.tag} 没有资产")
             return 1
-
-    # 校验和跟着一起发，用户装之前能自己核一遍。
-    # 只有本地模式需要自己算——从 GitHub 拉的那边，SHA256SUMS 本身就是一份资产。
-    if args.local:
-        sums_path = os.path.join(args.local, SUMS_NAME)
-        lines = [f"{sha256_of(p)}  {os.path.basename(p)}" for p in files]
-        with open(sums_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        files = files + [sums_path]
 
     # ── 2. 找到或创建 Gitee 发行版 ───────────────────────────────────────
     releases = gitee_json(f"/repos/{gitee_repo}/releases", gitee_token)
@@ -284,7 +267,36 @@ def main() -> int:
             return 1
         log(f"▸ 已建 Gitee 发行版 {args.tag}（id={release_id}）")
 
-    # ── 3. 逐个上传，同名的跳过（幂等）────────────────────────────────────
+    # ── 3. 只下载 Gitee 上还缺的那几个 ───────────────────────────────────
+    if rel is not None:
+        for asset in rel.get("assets", []):
+            # --include 在下载前就过滤：省得把 90 MB 的 deb 拉下来只为跳过它
+            if args.include and not any(
+                fnmatch.fnmatch(asset["name"], pat) for pat in args.include
+            ):
+                log(f"· 跳过不匹配 --include 的资产 {asset['name']}")
+                continue
+            if asset["name"] in existing:
+                log(f"· Gitee 上已有 {asset['name']}，不必下载")
+                continue
+            dest = os.path.join(work, asset["name"])
+            log(f"↓ 下载 {asset['name']} · {asset['size'] // 1048576} MB")
+            download(asset["url"], dest, gh_token)
+            files.append(dest)
+        if not files:
+            log(f"✅ Gitee {args.tag} 的资产已全部就位，无需再传")
+            return 0
+
+    # 校验和跟着一起发，用户装之前能自己核一遍。
+    # 只有本地模式需要自己算——从 GitHub 拉的那边，SHA256SUMS 本身就是一份资产。
+    if args.local:
+        sums_path = os.path.join(args.local, SUMS_NAME)
+        lines = [f"{sha256_of(p)}  {os.path.basename(p)}" for p in files]
+        with open(sums_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        files = files + [sums_path]
+
+    # ── 4. 逐个上传，同名的跳过（幂等）────────────────────────────────────
     # 单件超时 + 重试：卡死的那一次只浪费 timeout 秒，不会把整个 job 拖垮
     failed = []
     for path in files:
@@ -320,8 +332,11 @@ def main() -> int:
             failed.append(name)
 
     if failed:
-        log(f"::error::{len(failed)} 个资产没传上去：{', '.join(failed)}")
-        return 1
+        # 定时补缺的调用方（mirror-sync）用 GITEE_SOFT_FAIL=1：Gitee 传参本来就不稳，
+        # 缺件只出 warning、不把每 3 小时的定时任务整片染红；真正的发版路径仍然判红。
+        soft = os.environ.get("GITEE_SOFT_FAIL") == "1"
+        log(f"::{('warning' if soft else 'error')}::{len(failed)} 个资产没传上去：{', '.join(failed)}")
+        return 0 if soft else 1
     log(f"✅ 完成：Gitee {gitee_repo} 发行版 {args.tag}")
     return 0
 
