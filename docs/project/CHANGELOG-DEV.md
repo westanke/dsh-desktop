@@ -5,7 +5,49 @@
 
 ---
 
-## 开发中 · 第四批：纯逻辑测试机制（batch4，未打 tag）
+## 开发中 · 第三批 X9 阶段一：DSH1 配置导入（未打 tag）
+
+### 基于什么
+
+`docs/project/inbox/2026-10-23-batch3-crosslearn-ui.md` 的 X9 原本标着「先评估，
+勿直接动手」。lead 出了独立评估（`对齐台账/X9-桌面多地址与DSH1导入可行性评估.md`），
+结论拆两阶段：**阶段一导入先做**（消灭手填 URL + 长 token 的痛，与多地址零耦合），
+**阶段二多地址选路暂缓**（台式固定工位价值低，等笔记本漂移的真实需求背书）。
+用户 2026-10-23 拍板：做阶段一；**真机测试通过后再推 + 打 tag**。
+
+### 干了什么
+
+- `data/ConnectionShare.kt`（新，331 行）：从安卓 `ConnectionShare.kt` 移植的
+  编解码纯函数。线格式 `DSH1:<Base64URL(JSON)>` 三端一致（生成端在 companion 仓
+  `tools/emit-config.mjs`）。容错逐项照搬：空白/零宽/BOM、前缀大小写与任意位置、
+  URL-safe 与标准两种字母表、缺 `=` 填充、尾部粘连标点、JSON 外裹文字的花括号提取。
+  **桌面侧裁剪**：只做导入不做生成（UI 不暴露 `encode()`，它只服务往返测试）；
+  没有 Host/Endpoint 选路模型，`toImported()` 只取第一个地址，其余地址
+  `extraEndpoints` 计数告知、不静默丢弃。任何不合法输入返回带**具体原因**的
+  `DecodeResult.Failure`，绝不抛异常——用户粘贴时已经离开电脑，失败即整个方案失败。
+- `AppStateConnectionImport.kt`（新，67 行）：导入状态机。有令牌 → 走既有
+  `connect(endpoint, null, importedToken)` 完整通路（health 即连通性验证，通过才落盘，
+  令牌仍走 AES-GCM，落地后补拉一次 `currentDevice()` 防 deviceId 串主机）；
+  无令牌 → 只填地址等配对码，刻意不落盘（scopes 依附于令牌）。
+- `AppState.kt`（987→1014）：`connect()` 加 `importedToken` / `importNotice`
+  两个可选参数；连接前 `teardown()` 清 client 缓存（顺带修掉"换地址重连会拿旧
+  凭据"的潜在坑）；新增 `importNotice` 字段（常驻提示，不用 toast——导入结果
+  有两部分，一闪就没）。
+- `ui/ConnectScreen.kt`（175→249）：② 之后加「③ 粘贴 DSH1 配置导入」折叠区，
+  多行粘贴框 + 导入按钮 + 常驻提示条（mutedSurface）。粘贴框**用后即清**
+  （文本等同于钥匙，不留着被截图带走）。
+- 踩到并记进 PITFALLS 的语义坑：**DSH1 的 `deviceName` 是分享端设备名，
+  桌面 `profile.deviceName` 是本机名**，照搬"填好 deviceName"会让服务端看到
+  本机叫「Pixel 9」。`toImported()` 刻意不映射它。
+
+### 测了什么
+
+- `tools/verify-parity.sh` **128 项**（+46）：编解码往返、微信换行/零宽/前缀
+  任意位置/两种字母表/缺填充/尾标点、五类拒绝原因逐条、归一化（协议大小写/
+  `/api/v1`/尾斜杠/空白）、`toImported()` 字段集合（无 deviceName）。
+- `build.sh` 编译通过；`docs-check.sh` 32/32；`test.sh` 214 项全绿。
+- **未真机验证**：导入需连真桥 v2.6.0 + companion 仓生成端产文本，
+  验连通性验证、令牌落盘、无令牌分支——按用户指示，**真机通过后再推 + 打 tag**。
 
 ### 基于什么
 

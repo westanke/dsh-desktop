@@ -90,7 +90,18 @@ class AppState(
     var connection by mutableStateOf(if (token != null) ConnectionState.Connecting else ConnectionState.Disconnected)
         private set
     var connectionError by mutableStateOf<String?>(null)
-        private set
+        internal set
+
+    /**
+     * 「DSH1 配置导入」的常驻提示：导入了什么、忽略了什么（X9 阶段一）。
+     *
+     * 不用 toast——导入结果有两部分（电脑名 + 未启用地址数），一闪就没；
+     * 也不用 connectionError——导入成功不是错误。由 `AppStateConnectionImport.kt`
+     * 写入，下次导入或手动连接时替换。
+     */
+    var importNotice by mutableStateOf<String?>(null)
+        internal set
+
     var device by mutableStateOf<DeviceView?>(null)
 
     /** 当前页。启动时按上次离开的页恢复（`prefs.lastNav`），换页由 `App` 回写。 */
@@ -346,12 +357,21 @@ class AppState(
         return value
     }
 
-    fun connect(endpointRaw: String, pairingCode: String?) {
+    fun connect(
+        endpointRaw: String,
+        pairingCode: String?,
+        importedToken: String? = null,
+        importNotice: String? = null,
+    ) {
         val endpoint = normalizeEndpoint(endpointRaw)
         if (endpoint.isEmpty()) {
             connectionError = "请先填写服务器地址"
             return
         }
+        // 换地址/换令牌前丢掉旧 client 缓存：client() 是按 endpoint+token 惰性建的，
+        // 不清就会拿旧凭据连新地址——导入配置替换连接时尤其致命。
+        teardown()
+        this.importNotice = importNotice
         connection = ConnectionState.Connecting
         connectionError = null
         scope.launch {
@@ -365,7 +385,8 @@ class AppState(
                     Triple(health.pluginVersion ?: health.version, paired, endpoint)
                 }
             }.onSuccess { (pluginVersion, paired, resolved) ->
-                val effectiveToken = paired?.token ?: token
+                // 导入的令牌优先于已存令牌：用户刚粘贴的配置就是明确意图。
+                val effectiveToken = paired?.token ?: importedToken ?: token
                 if (effectiveToken == null) {
                     connection = ConnectionState.Failed
                     connectionError = "这台服务器还没有配对过，请填写一次性配对码"
@@ -381,7 +402,13 @@ class AppState(
                 )
                 token = effectiveToken
                 AppStorage.save(profile, effectiveToken)
-                paired?.device?.let { adoptDevice(it) }
+                when {
+                    paired != null -> adoptDevice(paired.device)
+                    // 导入的令牌没经过配对响应，补拉一次设备视图：
+                    // deviceId / scopes / rootIds 以服务端为准，别留着上一个 Host 的值。
+                    importedToken != null ->
+                        runCatching { client().currentDevice() }.getOrNull()?.let { adoptDevice(it) }
+                }
                 connection = ConnectionState.Connected
                 showToast("已连接 · 插件 $pluginVersion")
                 bootstrap()

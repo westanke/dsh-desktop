@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.westanke.dshdesktop.AppState
 import io.github.westanke.dshdesktop.ConnectionState
+import io.github.westanke.dshdesktop.importDsh1Config
 
 /**
  * 连接页。
@@ -119,6 +121,78 @@ fun ConnectScreen(state: AppState) {
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.textTertiary,
                 )
+
+                Spacer(Modifier.height(18.dp))
+                SectionLabel("③ 或粘贴 DSH1 配置导入")
+                Spacer(Modifier.height(6.dp))
+                var showImport by remember { mutableStateOf(false) }
+                if (!showImport) {
+                    TextButton(
+                        onClick = { showImport = true },
+                        enabled = !busy,
+                        shape = RoundedCornerShape(Tokens.radiusSm),
+                    ) {
+                        Text("粘贴 DSH1 配置导入", style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    // 这段文本等同于设备令牌（见 data/ConnectionShare.kt 的安全边界）：
+                    // 无论导入成败都立即清空，不让它留在输入框里被截图/录屏带走。
+                    var configText by remember { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = configText,
+                        onValueChange = { configText = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp),
+                        enabled = !busy,
+                        placeholder = { Text("DSH1:…", style = MaterialTheme.typography.bodyMedium) },
+                        shape = RoundedCornerShape(Tokens.radiusSm),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "在电脑上生成这段文本（含地址与设备令牌），经微信/邮件发给自己，再粘贴到这里。" +
+                            "它等同于钥匙，别转发他人；导入会替换当前连接配置。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textTertiary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Button(
+                            onClick = {
+                                state.importDsh1Config(configText) { filled ->
+                                    // 与表单初始值同一约定：地址栏不显示协议前缀
+                                    endpoint = filled.removePrefix("http://").removePrefix("https://")
+                                }
+                                configText = ""
+                            },
+                            enabled = !busy && configText.isNotBlank(),
+                            shape = RoundedCornerShape(Tokens.radiusSm),
+                            modifier = Modifier.height(42.dp),
+                        ) {
+                            Text("导入并连接")
+                        }
+                        TextButton(onClick = { showImport = false }, enabled = !busy) {
+                            Text("收起", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+
+                if (state.importNotice != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Surface(
+                        color = colors.mutedSurface,
+                        shape = RoundedCornerShape(Tokens.radiusSm),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            state.importNotice.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary,
+                            modifier = Modifier.padding(12.dp),
+                        )
+                    }
+                }
 
                 if (state.connectionError != null) {
                     Spacer(Modifier.height(14.dp))

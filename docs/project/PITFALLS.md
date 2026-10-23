@@ -856,3 +856,23 @@ dict: {key: <refId>}}}}`，`enum` 也不是数组，而是一个 `union` 节点 
 **防回归**：`tools/verify-parity.sh` 的 P2-1 段用**数字 ref id** 的 schemastery
 样本钉住整条摊平链（enum/min-max/secret/循环引用/未知类型丢弃）。
 新增控件类型时，先问"这格在 schemastery 里对应什么节点"。
+
+### DSH1 的 deviceName 不是本机名
+
+**现象**：导入一份别人分享的 `DSH1:` 配置后，服务端设备列表里本机的名字
+变成了「Pixel 9」——那是分享端手机的名字；或者拿配置里的名字当了令牌所属设备。
+
+**根因**：`DSH1` JSON 里有两个名字，语义跨端不同：`displayName` 是**电脑**的名字
+（只配提示用），`deviceName` 是**分享端设备**的名字（安卓 Payload 直接搬
+HostStore 的字段）。而桌面 `ConnectionProfile.deviceName` 是**本机**的名字——
+配对时 `exchangePairing(code, profile.deviceName)` 上报给服务端。
+按"填好 endpoint/token/deviceName/scopes"的字面意思照搬，就会拿分享端的名字
+覆盖本机名。
+
+**修法**：`data/ConnectionShare.kt` 的 `toImported()` **刻意不映射 deviceName**；
+`displayName` 只进导入提示（「已导入『家里的电脑』」），不落 profile。
+桌面始终用 `defaultDeviceName()` 的本机名。
+
+**防回归**：`tools/verify-parity.sh` 的 X9 段逐字段断言 `toImported()` 的结果集合
+（baseUrl / label / token / scopes / displayName / extraEndpoints），
+**没有 deviceName 这一项**——谁再加回来，先回来读这条。

@@ -6,6 +6,24 @@
 
 ---
 
+## 未打版 · 第三批 X9 阶段一：DSH1 配置导入（2026-10-23）
+
+**基于什么**：batch3 交接单 X9（原标「先评估」）。lead 独立评估结论：阶段一导入
+先做、阶段二多地址选路暂缓。用户拍板做阶段一，并指示**真机测试通过后再推 + 打 tag**。
+
+**干了什么**：`data/ConnectionShare.kt`（新，331 行，安卓移植 + 桌面裁剪：
+只做导入不做生成、只取第一个地址）+ `AppStateConnectionImport.kt`（新，67 行）
++ `connect()` 加 `importedToken`/`importNotice` 参数与 `teardown()` 清缓存
++ `ui/ConnectScreen.kt` 的「③ 粘贴 DSH1 配置导入」折叠区。坑位
+「DSH1 的 deviceName 不是本机名」已进 PITFALLS + AGENTS §7。
+
+**测了什么**：`verify-parity.sh` 128 项（X9 段 46 项：往返/容错/拒绝原因/
+归一化/首址选取）；`build.sh`、`docs-check.sh` 32/32、`test.sh` 214 项全绿。
+**未真机验证**：导入需连真桥 v2.6.0 + companion 仓 `emit-config.mjs` 产文本，
+验连通性验证、令牌落盘、无令牌分支——通过后才推 + 打 tag。
+
+---
+
 ## v1.0.2 · 发版（2026-10-23）
 
 **基于什么**：用户「发版」。1.0.1 之后积了 9 个提交：消息流对齐官方 Web（TurnRun 按轮折叠、

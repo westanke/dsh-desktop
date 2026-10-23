@@ -15,7 +15,10 @@
 - **P0-1 ✓** `mergeLatestPage()` + 视口贴底跟随/翻页锚定；`verify-history.sh` 有合并回归。
 - **P1-1 ✓** `MdBlock.Image` / `parseImageMarkdown()` / `PathImage()`；降级口径与本文一致（http 图、未知扩展名、行内图→链接；上下文注入不走 MarkdownText 天然隔离）。
 - **P1-2 ✓** `data/ChatLink.kt` `classifyChatLink()` + `openFileByPath(path, line)`；`SourcePane` 按行渲染可定位高亮。
-- **P2-1 / P2-2 / P3** 未动，排第二批。**第二批需求通知（自包含交接单，含协议/APP 源路径/验收/门禁）已发**：[`inbox/2026-10-23-batch2-settings-update-permission.md`](inbox/2026-10-23-batch2-settings-update-permission.md)，待 workbuddy 实现。
+- **第二批 ✓** P2-1 命名空间表单 / P2-2 检查更新 / P3 新建会话选档位（inbox `2026-10-23-batch2-settings-update-permission.md`）。
+- **第三批 X9 阶段一 ✓** `DSH1:` 配置导入（inbox `2026-10-23-batch3-crosslearn-ui.md` 的 X9 拆两阶段）：只做导入不做生成、只取第一个地址落现有单条 profile；多地址选路（阶段二）按 `对齐台账/X9-桌面多地址与DSH1导入可行性评估.md` 暂缓，等笔记本多网络漂移的真实需求背书。
+- **第四批 ✓**（工程互鉴）纯逻辑测试机制：`tools/test.sh` + 公共断言库，接进 docs-check 第 8 节（inbox `2026-10-23-batch4-purelogic-testing.md`）。
+- X1–X8（dsh-ui 卡片 / @补全 / 重试 / 字号 / 统计 / HTML / 分叉选点 / 连接诊断）未动，见 batch3 交接单各自排期。
 
 发版时把下方「差距清单」对应项回填进 `PARITY.md` 矩阵（基准改 v2.2.52）并并表。
 

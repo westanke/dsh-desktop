@@ -7,6 +7,7 @@ import io.github.westanke.dshdesktop.data.SettingsSchema
 import io.github.westanke.dshdesktop.data.SettingsSecret
 import io.github.westanke.dshdesktop.data.UpdateChannel
 import io.github.westanke.dshdesktop.data.UpdatePlatform
+import io.github.westanke.dshdesktop.data.ConnectionShare
 import io.github.westanke.dshdesktop.data.canWriteSettingsNamespaces
 import io.github.westanke.dshdesktop.data.channelForLanguage
 import io.github.westanke.dshdesktop.data.clampSettingsNumber
@@ -21,19 +22,22 @@ import io.github.westanke.dshdesktop.data.pickUpdateAsset
 import io.github.westanke.dshdesktop.data.resolveNewSessionPreset
 import io.github.westanke.dshdesktop.data.runningLiteInstall
 import io.github.westanke.dshdesktop.data.summarizeReleaseNotes
+import io.github.westanke.dshdesktop.data.toImported
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import java.util.Base64
 
 /**
- * 第二批对标（P2-1 schema 设置表单 / P2-2 检查更新 / P3 新建会话选档位）的纯函数用例。
+ * 第二 / 三批对标纯函数的用例。
  *
  * 为什么不用 JUnit：这个工程没有测试框架依赖（见 TECH-DEBT DEBT-001），
- * 而这几层都是纯函数，一个 main 函数就够了。跑法见 `tools/verify-parity.sh`。
+ * 而这些层都是纯函数，一个 main 函数就够了。跑法见 `tools/verify-parity.sh`。
  *
  * 规则：只收**会咬人的**边界——版本号逐段比较（`2.2.9 > 2.2.47` 是真实事故）、
- * 密钥判据、schema 摊不出来的降级、档位默认值语义。
+ * 密钥判据、schema 摊不出来的降级、档位默认值语义、DSH1 粘贴容错
+ * （用户粘贴时已经离开电脑，解析失败等于整个方案失败）。
  *
  * 断言助手用公共库 `tools/VerifySupport.kt`（vcheck/vsummary），四个套件同一份
  * 措辞；跑法见 `tools/verify-parity.sh` 或 `tools/test.sh`。
@@ -379,10 +383,134 @@ private fun verifySettingsNamespaces() {
     vcheck("空 key 原样返回", humanizeFieldName("") == "")
 }
 
+// ── X9：DSH1 配置导入（ConnectionShare 编解码与粘贴容错）────────────────────
+
+private fun decodeOk(text: String): ConnectionShare.Payload? =
+    (ConnectionShare.decode(text) as? ConnectionShare.DecodeResult.Success)?.payload
+
+private fun decodeFails(text: String): ConnectionShare.Reason? =
+    (ConnectionShare.decode(text) as? ConnectionShare.DecodeResult.Failure)?.reason
+
+/** 把一段文本（通常是裸 JSON）包成 DSH1——测「JSON 层 / 地址层」的拒绝原因时用。 */
+private fun dsh1(text: String): String =
+    "DSH1:" + Base64.getUrlEncoder().withoutPadding().encodeToString(text.toByteArray(Charsets.UTF_8))
+
+private fun verifyDsh1Import() {
+    vsection("X9 · DSH1 配置导入")
+
+    val payload = ConnectionShare.Payload(
+        displayName = "家里的电脑",
+        endpoints = listOf(
+            ConnectionShare.Endpoint(label = "家里局域网", baseUrl = "http://192.168.1.126:3090"),
+            ConnectionShare.Endpoint(label = "公司虚拟网", baseUrl = "https://100.101.102.103:3090"),
+        ),
+        token = "tok-abc123",
+        deviceName = "Pixel 9",
+        scopes = listOf("files.read", "chat.write"),
+    )
+    val encoded = ConnectionShare.encode(payload)
+    vcheck("编码带 DSH1: 前缀", encoded.startsWith("DSH1:"))
+    vcheck("URL-safe 无填充", !encoded.contains('+') && !encoded.contains('/') && !encoded.contains('='))
+    vcheck("往返解回 Success", decodeOk(encoded) != null)
+    vcheck("往返字段一一对应", decodeOk(encoded) == payload)
+
+    // 瘦配置（无 token / 无 scopes / label 缺省）也要能往返
+    val lean = ConnectionShare.Payload(
+        displayName = "办公室",
+        endpoints = listOf(ConnectionShare.Endpoint(baseUrl = "http://10.0.0.8:3090")),
+    )
+    vcheck("瘦配置往返", decodeOk(ConnectionShare.encode(lean)) == lean)
+
+    // ── 粘贴容错：微信/邮件折腾一圈还要能还原 ──────────────────────────────
+    val body = encoded.substring(5)
+    vcheck("首尾与内部空白换行", decodeOk("  $body\n\r\t ") != null)
+    vcheck("内部插空白", decodeOk(body.substring(0, 8) + " \n " + body.substring(8)) != null)
+    vcheck("零宽字符与 BOM", decodeOk("\uFEFF" + body.substring(0, 9) + "\u200B\u200C\u200D\u2060" + body.substring(9)) != null)
+    vcheck("中文全角空格与 nbsp", decodeOk("\u3000$body\u00A0") != null)
+    vcheck("小写前缀 dsh1:", decodeOk("dsh1:$body") != null)
+    vcheck("混合大小写前缀 DsH1:", decodeOk("DsH1:$body") != null)
+    vcheck("前缀被换行拆开", decodeOk("DS\nH1:$body") != null)
+    vcheck("前缀在中间带标签", decodeOk("Pixel 9 的配置：DSH1:$body") != null)
+    vcheck("无前缀纯 Base64", decodeOk(body) != null)
+    vcheck("尾部粘连中文标点", decodeOk(encoded + "。『』") != null)
+    vcheck("尾部粘连引号", decodeOk(encoded + "\"'」") != null)
+
+    // 两种 Base64 字母表：encode 用 URL-safe，邮件/网页可能换成标准的。
+    // U+FFFD 的 UTF-8 是 EF BF BD，落在 3 字节组边界时 URL-safe 必含 '-'——
+    // `{"displayName":"` 正好 16 字节，名字里垫两个单字节字符即可对齐。
+    val alphabet = payload.copy(displayName = "ab\uFFFD")
+    val withDash = ConnectionShare.encode(alphabet)
+    vcheck("URL-safe 输出确实含 '-'", withDash.contains('-'))
+    vcheck("标准字母表也能解", decodeOk(withDash.replace('-', '+').replace('_', '/')) != null)
+    vcheck(
+        "标准字母表内容一致",
+        decodeOk(withDash.replace('-', '+').replace('_', '/'))?.displayName == "ab\uFFFD",
+    )
+    val padLen = (4 - encoded.length % 4) % 4
+    vcheck("补上 = 填充也能解", decodeOk(encoded + "=".repeat(padLen)) != null)
+
+    // JSON 外裹了前后缀文字：花括号提取兜底
+    val rawJson = String(Base64.getUrlDecoder().decode(body), Charsets.UTF_8)
+    val wrapped = dsh1("前缀文字${rawJson}后缀文字")
+    vcheck("JSON 外裹 junk 也能提取", decodeOk(wrapped) != null)
+
+    // ── 归一化：协议大小写 / /api/v1 后缀 / 尾斜杠 / 首尾空白 ───────────────
+    val messy = ConnectionShare.Payload(
+        displayName = " 家里的电脑 ",
+        endpoints = listOf(ConnectionShare.Endpoint(label = " 局域网 ", baseUrl = "HTTP://192.168.1.126:3090/api/v1/")),
+        token = "  tok-1  ",
+        scopes = listOf(" files.read ", "", "chat.write"),
+    )
+    val messyBack = decodeOk(ConnectionShare.encode(messy))
+    vcheck("协议小写 + 去 /api/v1 + 去尾斜杠", messyBack?.endpoints?.single()?.baseUrl == "http://192.168.1.126:3090")
+    vcheck("displayName 去首尾空白", messyBack?.displayName == "家里的电脑")
+    vcheck("label 去首尾空白", messyBack?.endpoints?.single()?.label == "局域网")
+    vcheck("token 去首尾空白", messyBack?.token == "tok-1")
+    vcheck("scopes 去空白并滤空项", messyBack?.scopes == listOf("files.read", "chat.write"))
+
+    // ── 拒绝路径：每个都给具体原因，绝不静默 ────────────────────────────────
+    vcheck("空白输入 → EMPTY", decodeFails("   \n\t ") == ConnectionShare.Reason.EMPTY)
+    vcheck("非 Base64 垃圾 → NOT_BASE64", decodeFails("DSH1:这不是配置文本！！！") == ConnectionShare.Reason.NOT_BASE64)
+    vcheck("长度 ≡1 mod 4 → NOT_BASE64", decodeFails("DSH1:AAAAA") == ConnectionShare.Reason.NOT_BASE64)
+    vcheck("Base64 的非 JSON → NOT_JSON",
+        decodeFails(dsh1("hello world")) == ConnectionShare.Reason.NOT_JSON)
+    vcheck("endpoints 为空 → NO_ENDPOINT",
+        decodeFails(dsh1("""{"displayName":"x","endpoints":[]}""")) == ConnectionShare.Reason.NO_ENDPOINT)
+    vcheck("JSON 缺 endpoints 键 → NO_ENDPOINT",
+        decodeFails(dsh1("""{"displayName":"x"}""")) == ConnectionShare.Reason.NO_ENDPOINT)
+    vcheck("ftp:// 地址 → UNUSABLE_URL",
+        decodeFails(dsh1("""{"endpoints":[{"baseUrl":"ftp://host:21"}]}""")) == ConnectionShare.Reason.UNUSABLE_URL)
+    vcheck("http:// 后面直接路径 → UNUSABLE_URL",
+        decodeFails(dsh1("""{"endpoints":[{"baseUrl":"http:///api/v1"}]}""")) == ConnectionShare.Reason.UNUSABLE_URL)
+    vcheck("只有端口没有主机名 → UNUSABLE_URL",
+        decodeFails(dsh1("""{"endpoints":[{"baseUrl":"http://:3090"}]}""")) == ConnectionShare.Reason.UNUSABLE_URL)
+    vcheck("detail 带出问题地址",
+        (ConnectionShare.decode(dsh1("""{"endpoints":[{"baseUrl":"ftp://x"}]}"""))
+            as? ConnectionShare.DecodeResult.Failure)?.detail == "ftp://x")
+
+    // 对面直接拿安卓 Payload.serializer() 输出（带 id/kind/enabled）也照读不误
+    val androidFlavored = """{"displayName":"x","endpoints":[{"id":"ep-1","label":"lan","baseUrl":"http://h:3090","kind":"lan","enabled":true}],"token":"t"}"""
+    vcheck("多余字段宽容", decodeOk(dsh1(androidFlavored)) != null)
+
+    // ── toImported：桌面只取第一个地址，其余计数告知 ────────────────────────
+    val imported = payload.toImported()
+    vcheck("取第一个地址", imported.baseUrl == "http://192.168.1.126:3090")
+    vcheck("label 保留", imported.label == "家里局域网")
+    vcheck("其余地址计数告知", imported.extraEndpoints == 1)
+    vcheck("displayName 供提示用", imported.displayName == "家里的电脑")
+    vcheck("token 带入", imported.token == "tok-abc123")
+    vcheck("scopes 带入", imported.scopes == listOf("files.read", "chat.write"))
+    val leanImported = lean.toImported()
+    vcheck("单地址无额外计数", leanImported.extraEndpoints == 0)
+    vcheck("label 缺省退回 baseUrl", leanImported.label == "http://10.0.0.8:3090")
+    vcheck("无 token → null（仍需配对码）", leanImported.token == null)
+}
+
 fun main() {
-    println("▸ 第二批对标纯函数用例")
+    println("▸ 对标纯函数用例")
     verifyNewSessionPreset()
     verifyUpdateChecker()
     verifySettingsNamespaces()
+    verifyDsh1Import()
     if (vsummary() > 0) kotlin.system.exitProcess(1)
 }
