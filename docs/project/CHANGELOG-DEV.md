@@ -64,6 +64,41 @@
   下载 + 进度 + 清单读取 + 取消通路实测通过。
 - **未真机验证**：六态 UI 在真机的实际表现（要连真 bridge 那台机器上点一遍）。
 
+### 干了什么（P2-1 · schema 驱动的通用设置命名空间表单）
+
+- `data/SettingsNamespaces.kt`（新，401 行，对标 companion `691b5d5`）：wire 模型 +
+  schema→控件纯函数层。**关键坑：内核发的 schema 是 schemastery 引用图
+  （`{uid, refs}`），不是标准 JSON Schema**——`enum` 是 `union` 节点指向若干
+  `const`。先认 `properties`，取不到再现场摊平（最多三层），**摊不出就回只读，
+  绝不猜类型**（把密钥猜成输入框最坏）。密钥三判据任一命中即只读：
+  `secrets[].path` 首段 / 值是 `***` / schema `meta.role=secret`（摊平后落 `x-secret`）。
+- 入口过滤 `forNativeApp()`：非 `WEBUI_ONLY_NAMESPACES`（纯 WebUI 键，Compose 自绘
+  界面一个都不读，显示=给一排拨了没反应的开关）+ `writable` + `hasEditableField()`，
+  三条全满足才画。
+- `data/ApiExt.kt`：`GET settings/namespaces` / `PATCH settings/namespaces/{ns}`
+  （带 `expectedRevision` 乐观锁）；`isAbsentOnBridge()` = 404/403 或码在
+  `{ROUTE_NOT_FOUND, SCOPE_REQUIRED, SCOPE_INVALID, FORBIDDEN}`——**刻意不含 503**。
+- `AppStateSettingsNamespaces.kt`（新，146 行）：三层降级照搬 companion——软加载
+  失败退 null（入口不画，读失败不拖垮设置页）；无 `settings.read` **直接不发请求**
+  （发了必 403）；用户刷新时 404/403 静默隐藏、503 如实报错；409 冲突不把错误码
+  原文丢用户，就地重拉 + 「已在别处被修改，已刷新」；成功后用 PATCH 返回的单对象
+  替换同 ns 项（不整表重拉，避免详情闪烁）。
+- `ui/SettingsNamespaces.kt`（新，494 行）：设置页内嵌卡片 + 每命名空间可展开表单；
+  六类控件编辑器（enum 胶囊 / boolean 开关 / number 夹取 / text / secret 只读可重填 /
+  只读折叠 JSON）；脏值跟踪按命名空间保存；**提交体只在用户真的输入新值时才含
+  secret path**，绝不回显、绝不明文提交。
+- 无 `settings.write` 是常态（配对默认五档不含它）：表单照画，顶部明说
+  「只能查看、不能保存」，保存请求直接不发。
+
+### 测了什么（P2-1）
+
+- `verify-parity.sh` 从 36 项扩到 **82 项**：schemastery 摊平（用**数字 ref id**
+  的真实形态，顺带钉住 `contentOrNull` 对数字基元的语义）、标准 JSON Schema 形态、
+  密钥三判据、入口过滤、夹取（min>max 脏 schema 原样返回）、人类化；
+  `build.sh` 0 error。
+- **未真机验证**：真桥 v2.6.0 的命名空间清单、schemastery 真样渲染、409 制造与
+  自动重拉、密钥位抓包确认（提交体不含密钥 path）——见 inbox 验收项逐条。
+
 ---
 
 ## v1.0.2 · 消息流对齐官方 Web + 自由复制/引用 + 对标 companion 2.2.52 第一批（2026-10-23）

@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import io.github.westanke.dshdesktop.UpdateState
 import io.github.westanke.dshdesktop.cancelUpdateDownload
 import io.github.westanke.dshdesktop.checkForUpdate
 import io.github.westanke.dshdesktop.downloadUpdate
+import io.github.westanke.dshdesktop.loadSettingsNamespaces
 import io.github.westanke.dshdesktop.openDownloadedPackage
 import io.github.westanke.dshdesktop.openReleasePage
 import io.github.westanke.dshdesktop.data.formatFileSize
@@ -72,6 +74,10 @@ private val appVersion: String by lazy {
 fun SettingsScreen(state: AppState) {
     val colors = LocalAppColors.current
     val device = state.device
+
+    // 通用设置命名空间（P2-1）：软加载通道，读不到就静默不画那张卡
+    // （老桥没有这条路由 / 设备没有 settings.read）。理由见 AppStateSettingsNamespaces.kt。
+    LaunchedEffect(Unit) { if (state.settingsNamespaces == null) state.loadSettingsNamespaces() }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         PageHeader("设置", "连接、权限与外观")
@@ -231,6 +237,11 @@ fun SettingsScreen(state: AppState) {
                     )
                 }
             }
+
+            // ── 通用设置（命名空间，P2-1）────────────────────────
+            // 整块可能不画：老桥 / 缺 scope / 全是 WebUI 键时 forNativeApp() 过滤完
+            // 是空的，那正是想要的效果（无噪音）。
+            SettingsNamespacesSection(state)
 
             // ── 关于 ─────────────────────────────────────────────
             AppCard(Modifier.fillMaxWidth()) {

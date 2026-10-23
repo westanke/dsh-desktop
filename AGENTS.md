@@ -280,6 +280,7 @@ JUnit + Gradle 那套无处安放。这是 `TECH-DEBT.md` 的 **DEBT-001**，不
 - `push --mirror 搬不了 Release`
 - `历史只给最近一段，早期交付物不翻页就不出现`
 - `交付物事件有两个名字`
+- `内核 schema 是 schemastery，不是 JSON Schema`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 > `tools/docs-check.sh` 会检查两边是否一一对应。

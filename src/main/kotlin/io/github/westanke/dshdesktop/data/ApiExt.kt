@@ -309,3 +309,53 @@ fun DshWorkspaceClient.setPluginLoaded(name: String, loaded: Boolean): PluginTog
     val body = json.encodeToString(PluginToggleRequest.serializer(), PluginToggleRequest(name, loaded))
     return executeJson(endpoint("settings/plugins"), "PATCH", body, PluginToggleResult.serializer())
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// 通用设置命名空间（`GET/PATCH settings/namespaces`，桥 v2.6.0）
+//
+// 协议事实（`dsh-remote-bridge/docs/api/openapi.yaml:582-643` + companion `691b5d5`）：
+// - GET 需 scope `settings.read`；PATCH 需 `settings.write`，单次最多 32 条 op；
+// - PATCH 成功返回**更新后的单个命名空间对象**（形状同 list 里一项），调用方
+//   据此就地替换，不整表重拉；
+// - 错误码以**代码字符串**判：409 `SETTINGS_CONFLICT`（早期需求口误成 412，
+//   以 OpenAPI 为准）、403 `SETTINGS_NAMESPACE_READONLY`、400 `SETTINGS_OPS_INVALID`、
+//   503 `SETTINGS_UNAVAILABLE`、403 `SCOPE_REQUIRED`。
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 读命名空间列表。老桥没有这条路由时会抛 404，由 [isAbsentOnBridge] 判定降级。 */
+fun DshWorkspaceClient.settingsNamespaces(): SettingsNamespaceList =
+    executeJson(endpoint("settings/namespaces"), "GET", null, SettingsNamespaceList.serializer())
+
+/**
+ * 提交一个命名空间的修改（单次最多 32 条 op，服务端把关）。
+ *
+ * [expectedRevision] 传打开表单那一刻的 `revision`（乐观并发）：桥发现文档被别处
+ * 改过会回 409 `SETTINGS_CONFLICT`，调用方应就地重拉而不是覆盖。
+ */
+fun DshWorkspaceClient.updateSettingsNamespace(
+    ns: String,
+    ops: List<SettingsOp>,
+    expectedRevision: Int? = null,
+): SettingsNamespace {
+    val body = json.encodeToString(
+        SettingsNamespaceUpdate.serializer(),
+        SettingsNamespaceUpdate(ops, expectedRevision),
+    )
+    return executeJson(
+        endpoint("settings/namespaces/$ns"),
+        "PATCH",
+        body,
+        SettingsNamespace.serializer(),
+    )
+}
+
+/**
+ * 「桥没有这个端点/设备没有 scope」的判定：404 路由不存在，403 缺 scope。
+ *
+ * 刻意**不含** 503：服务端装了这条路由但暂时不可用，那是真的故障，该让用户知道。
+ * 这条通道完全可选（老桥零变化），所以命中时界面只静默隐藏入口，不弹错误。
+ */
+fun WorkspaceApiException.isAbsentOnBridge(): Boolean =
+    status == 404 || status == 403 || code in ABSENT_ON_BRIDGE_CODES
+
+private val ABSENT_ON_BRIDGE_CODES = setOf("ROUTE_NOT_FOUND", "SCOPE_REQUIRED", "SCOPE_INVALID", "FORBIDDEN")

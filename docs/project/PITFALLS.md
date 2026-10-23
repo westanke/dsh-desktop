@@ -832,3 +832,27 @@ Windows 侧同理：`dsh-desktop.bat` 双击时控制台一闪而过，失败分
 
 **防回归**：本地用 `DSH_LAUNCHER_NO_DIALOG=1` 跑四条路径——① 源不存在（404）
 ② 本地 tar 包 ③ 已解压缓存 ④ java 退出码非 0；每条都要有非零退出码 + 日志有记录。
+
+---
+
+### 内核 schema 是 schemastery，不是 JSON Schema
+
+**现象**：通用设置命名空间表单（P2-1）里所有字段都退化成**只读行**——
+字号那栏孤零零显示「14」，点不动、改不了，保存键永远灰。
+在开发机上看样例数据毫无问题，连真桥才复现。
+
+**根因**：内核 `settingsController.describe()` 发回来的 schema 不是标准 JSON Schema，
+而是 cordis 的 **schemastery 引用图**：`{uid: 12427, refs: {"12427": {type: "object",
+dict: {key: <refId>}}}}`，`enum` 也不是数组，而是一个 `union` 节点 `list` 里放若干
+`const` 节点的 id。只认 `properties` 的写法在真机上**永远取不到字段表**。
+（另有一个隐蔽处：ref id 是**数字**基元，取 id 必须用能吃数字的读法。）
+
+**修法**：`data/SettingsNamespaces.kt` 的 `SettingsSchema.fields()` 两代格式都认——
+先按 JSON Schema 取 `properties`，取不到再用 `Schemastery.expand()` 现场把引用图
+摊平成 JSON Schema 子集（**最多三层**，`union`→enum、`const`→单选项、`meta.role=secret`
+→`x-secret`）。**摊不出来就回只读兜底，绝不猜类型**——把密钥猜成输入框、
+把对象猜成字符串，都比只读更坏。
+
+**防回归**：`tools/verify-parity.sh` 的 P2-1 段用**数字 ref id** 的 schemastery
+样本钉住整条摊平链（enum/min-max/secret/循环引用/未知类型丢弃）。
+新增控件类型时，先问"这格在 schemastery 里对应什么节点"。

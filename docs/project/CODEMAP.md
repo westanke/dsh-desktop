@@ -15,7 +15,7 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `src/main/kotlin/io/github/westanke/dshdesktop/` | 全部源码（37 个文件，约 13 520 行） |
+| `src/main/kotlin/io/github/westanke/dshdesktop/` | 全部源码（40 个文件，约 14 630 行） |
 | `lib/` | 运行时依赖 50 个 jar（Compose、Skiko、OkHttp、序列化） |
 | `tools/` | 构建、打包、门禁、图标、mock 服务端、**图标瘦身 / 运行时资产 / 启动引导器** |
 | `docs/project/` | 制度文档（本文件在这） |
@@ -35,15 +35,17 @@
 | --- | --- | --- | --- | --- |
 | `src/Main.kt` | 210 | 入口：落盘目录探测（skiko 原生库目录 + tmpdir）、桌面图标兜底、窗口、全局快捷键、**`-Ddsh.openPath=` 启动参数定位文件** | `main()`、`ensureWritableDirs()`、`usableDir()`、`nativeDirCandidates()`、`tempDirCandidates()`、`ensureDesktopShortcut()`、`desktopDir()` | 无（JVM 入口） |
 | `src/Enums.kt` | 29 | 三个口径固定的枚举（连接态 / 导航页 / 抽屉栏目） | `ConnectionState`、`Nav`、`ChatPanel` | 全部 |
-| `src/AppState.kt` | 978 | 状态机本体：连接、会话列表、历史分页、事件分发、审批、发送；**产出文件回溯（按 seq 插回产出位置）**；文件页版面（`filesShowList` / `filesSplitRatio`）；**检查更新状态字段**（`updateState` / `updateDownloadJob` 必须留在类内——扩展函数存不了 `mutableStateOf`，逻辑在 `AppStateUpdate.kt`） | `AppState`、`connect()`、`autoConnect()`、`bootstrap()`、`refreshSessions()`、`reloadSessions()`、`createSession()`、`loadHistory()`、`loadOlderHistory()`、`scanDeliverables()`、`mergeScannedDeliverables()`、`sendMessage()`、`decideApproval()`、`handleEvent()`、`adoptDevice()`、`human()` | 全部 `ui/*` |
+| `src/AppState.kt` | 987 | 状态机本体：连接、会话列表、历史分页、事件分发、审批、发送；**产出文件回溯（按 seq 插回产出位置）**；文件页版面（`filesShowList` / `filesSplitRatio`）；**检查更新状态字段**（`updateState` / `updateDownloadJob` 必须留在类内——扩展函数存不了 `mutableStateOf`，逻辑在 `AppStateUpdate.kt`）；**通用设置命名空间状态字段**（`settingsNamespaces` / `settingsNamespacesBusy`，逻辑在 `AppStateSettingsNamespaces.kt`） | `AppState`、`connect()`、`autoConnect()`、`bootstrap()`、`refreshSessions()`、`reloadSessions()`、`createSession()`、`loadHistory()`、`loadOlderHistory()`、`scanDeliverables()`、`mergeScannedDeliverables()`、`sendMessage()`、`decideApproval()`、`handleEvent()`、`adoptDevice()`、`human()` | 全部 `ui/*` |
 | `src/AppStateProjections.kt` | 355 | 会话内能力：投影同步、权限档位、Agent Preset、断档检测、附件发送、后台任务、工作区管理 | `applyProjections()`、`clearProjections()`、`noteBaseline()`、`resyncHistory()`、`adoptCapabilities()`、`lacksCapability()`、`loadPermissionCatalog()`、`applyPermissionPreset()`、`loadAgentPresets()`、`chooseAgentPreset()`、`addAttachments()`、`sendMessageWithAttachments()`、`refreshJobs()`、`loadJobOutput()`、`killJob()`、`renameWorkspace()`、`deleteWorkspace()`、`seqGapHint`、`hasTodos` | `AppState`、`ui/ChatScreen`、`ui/ChatSidePanel`、`ui/Composer`、`ui/Sidebar` |
 | `src/AppStateSettings.kt` | 205 | 设置域：Provider / 凭据 / 模型发现、插件清单与启停 | `loadProviders()`、`saveProvider()`、`resetProviderModels()`、`deleteProvider()`、`createProvider()`、`discoverModels()`、`loadPlugins()`、`togglePlugin()` | `ui/ModelsScreen`、`ui/PluginsScreen` |
 | `src/AppStateChat.kt` | 96 | 聊天域的低频动作（按域拆分，见 `AppState` 构造参数注释） | `forkSession()`、`loadCommands()`、`runCommand()`、`refreshQuestions()`、`answerQuestion()`、`stats` | `ui/Sidebar`、`ui/ChatScreen`、`ui/Composer` |
 | `src/AppStateFiles.kt` | 470 | 文件域动作：浏览、**按类型分流预览**、上传、下载、删除、编辑保存（ETag）、移动/重命名、**下载后交系统打开**、**按绝对路径直接打开文件** | `refreshRoots()`、`previewEntry()`、`loadPreview()`、`textPreview()`、`openEntryExternally()`、`openAbsolutePath(preview=)`、`openFileByPath()`、`uploadFile()`、`downloadEntry()`、`deleteEntry()`、`createEntry()`、`refreshTrash()`、`restoreTrash()`、`openAbsolutePath()`、`startEditing()`、`saveDraft()`、`cancelEditing()`、`moveEntry()` | `ui/FilesScreen`、`ui/ChatScreen` |
 | `src/AppStateUpdate.kt` | 235 | 检查更新状态机（按域拆分，见 `AppState` 构造参数注释）：六态、渠道分流、下载进度与取消、SHA-256 校验、安装指引、交系统打开 | `UpdateState`（`Idle`/`Checking`/`UpToDate`/`Available`/`Downloading`/`Ready`/`Failed`）、`updatesDir()`、`checkForUpdate()`、`downloadUpdate()`、`cancelUpdateDownload()`、`installHint()`、`openDownloadedPackage()`、`openReleasePage()` | `ui/SettingsScreen` |
+| `src/AppStateSettingsNamespaces.kt` | 146 | 通用设置命名空间状态机（按域拆分）：**三层降级**——软加载失败退 null（入口不画）、无 `settings.read` 不发请求、用户刷新时 404/403 静默隐藏而 503 报错；保存走 409 就地重拉 + 成功替换同 ns 项 | `loadSettingsNamespaces()`、`refreshSettingsNamespaces()`、`saveSettingsNamespace()` | `ui/SettingsNamespaces` |
 | `src/data/DshApi.kt` | 874 | **唯一网络边界**：上游 kotlin-sdk 的 `DshWorkspaceClient`（含 provider / plugin / job / workspace 管理） | `DshWorkspaceClient`、`execute()`、`executeJson()`、`ensureSuccess()`、`endpoint()`、`WorkspaceApiException` | `AppState*` |
-| `src/data/ApiExt.kt` | 311 | SDK 没覆盖的端点：会话列表、历史分页、路径反查、提问、附件、插件清单 | `listChatSessions()`、`listMessagesPage()`、`resolvePath()`、`answerQuestion()`、`uploadEntry()`、`PromptPart`、`sendMessageParts()`、`uploadSessionAttachment()`、`readAttachment()`、`listPlugins()`、`setPluginLoaded()`、`ChatSession` | `AppState*` |
+| `src/data/ApiExt.kt` | 361 | SDK 没覆盖的端点：会话列表、历史分页、路径反查、提问、附件、插件清单、**通用设置命名空间** | `listChatSessions()`、`listMessagesPage()`、`resolvePath()`、`answerQuestion()`、`uploadEntry()`、`PromptPart`、`sendMessageParts()`、`uploadSessionAttachment()`、`readAttachment()`、`listPlugins()`、`setPluginLoaded()`、`settingsNamespaces()`、`updateSettingsNamespace()`、`isAbsentOnBridge()`、`ChatSession` | `AppState*` |
 | `src/data/UpdateChecker.kt` | 300 | **应用内检查更新**（纯函数 + 网络层，不依赖 Compose/AWT）：双渠道（按界面语言分流）、版本逐段比数字、`SHA256SUMS` 解析、平台/架构/full-lite 探测与资产挑选、更新说明压平、分块下载与 SHA-256 | `UpdateChannel`、`channelForLanguage()`、`ReleaseAsset`、`ReleaseInfo`、`isNewerVersion()`、`parseSha256Sums()`、`summarizeReleaseNotes()`、`UpdatePlatform`、`detectPlatform()`、`detectArch()`、`runningLiteInstall()`、`pickUpdateAsset()`、`UpdateException`、`UpdateChecker`、`sha256OfFile()` | `AppStateUpdate`、`tools/VerifyParity.kt` |
+| `src/data/SettingsNamespaces.kt` | 401 | **通用设置命名空间**（纯函数，不碰 Compose）：wire 模型 + schema→六类控件（`Enum/Boolean/Number/Text/Secret/ReadOnly`）映射；**schemastery 引用图摊平**（≤3 层，摊不出回只读，绝不猜类型）；密钥三判据只读；入口过滤（非 `WEBUI_ONLY_NAMESPACES` + `writable` + `hasEditableField`） | `SettingsNamespaceList`、`SettingsNamespace`、`SettingsSecret`、`SettingsOp`、`SettingsNamespaceUpdate`、`SettingsControl`、`SettingsFieldSpec`、`SettingsSchema`、`Schemastery`（私有）、`WEBUI_ONLY_NAMESPACES`、`forNativeApp()`、`hasEditableField()`、`canWriteSettingsNamespaces()`、`clampSettingsNumber()`、`humanizeFieldName()`、`prettySettingsJson()` | `AppStateSettingsNamespaces`、`ui/SettingsNamespaces`、`tools/VerifyParity.kt` |
 | `src/data/Attachments.kt` | 54 | 待发送附件的内存表示与 MIME 猜测 | `PendingAttachment`、`MAX_ATTACHMENT_BYTES`、`guessMediaType()` | `AppStateProjections`、`ui/Composer` |
 | `src/data/ChatHistory.kt` | 597 | **唯一历史投影出口**：事件 → 可渲染条目（含图片附件引用）；交付物抽取与**按 seq 插回产出位置**；工具组合并 + **按轮折叠成 TurnRun**（官方 Web「已完成，用时 X ⌄」的数据层） | `parseHistory()`、`unwrapEvent()`、`mergeToolRuns()`、`foldTurnRuns()`、`mergeDeliverableCards()`、**`mergeLatestPage()`（实时刷新合并，不抹更早页）**、`contentAttachments()`、`deliverablesIn()`、`deliverableFiles()`、`HistoryPage`、`ChatItem`（8 个子类，含 `TurnRun`）、`DeliverableFile`、`ChatStats`、`chatStats()` | `AppState`、`AppStateChat`、`ui/ChatScreen` |
 | `src/data/ChatLink.kt` | 55 | 会话内链接分类（对标 companion `ChatLinkTarget.classify`）：http→浏览器、工作区绝对路径→应用内定位、`:24`/`:24-30`/`#L24`/`#L24-L30` 行号后缀解析 | `classifyChatLink()`、`ChatLinkTarget` | `ui/MarkdownView`、`tools/VerifyMarkdown.kt` |
@@ -69,7 +71,8 @@
 | `src/ui/FilesScreen.kt` | 780 | 文件页：授权根 chip / 列表 / **可拖动分栏（目录 ⇄ 内容，比例可左右调）** / **按类型分流的预览**（Markdown 渲染 · 图片 · 源码（**按行 LazyColumn，可定位高亮行号**）· 交系统）+ 编辑器 + 移动 | `FilesScreen()`、`RootChips()`、`FileListPane()`、`Splitter()`、`PreviewPane()`、`TypeBadge()`、`MiniAction()`、`MarkdownPreviewPane()`、`SourcePane()`、`ImagePane()`、`UnsupportedPane()` | `ui/App` |
 | `src/ui/ModelsScreen.kt` | 486 | 模型页：供应商卡片、编辑（baseURL/密钥）、发现模型、自定义 provider、全局模型目录 | `ModelsScreen()`、`ProviderCard()`、`ProviderEditor()`、`CreateProviderDialog()` | `ui/App` |
 | `src/ui/PluginsScreen.kt` | 246 | 插件页：清单、启停开关、检查更新、`available:false` 的解释 | `PluginsScreen()`、`PluginCard()` | `ui/App` |
-| `src/ui/SettingsScreen.kt` | 516 | 设置页：连接信息、设备、主题、**会话（显示上下文注入开关）**、**关于（版本号 + 检查更新六态 UI：查 / 已最新 / 有新版 / 下载进度（可取消）/ 待安装 + 指引 / 失败重试）** | `SettingsScreen()`、`scopeLabel()`、`UpdateCheckSection()` | `ui/App` |
+| `src/ui/SettingsScreen.kt` | 527 | 设置页：连接信息、设备、主题、**会话（显示上下文注入开关）**、**通用设置命名空间入口（P2-1，可能整块不画）**、**关于（版本号 + 检查更新六态 UI）** | `SettingsScreen()`、`scopeLabel()`、`UpdateCheckSection()` | `ui/App` |
+| `src/ui/SettingsNamespaces.kt` | 494 | 通用设置命名空间表单（P2-1）：入口卡片 + 每命名空间可展开表单；六类控件编辑器（enum 胶囊 / boolean 开关 / number 夹取 / text / secret 只读可重填 / 只读折叠 JSON）；脏值跟踪 + 按命名空间保存 | `SettingsNamespacesSection()`、`NamespaceCard()`、`FieldRow()`、`EnumEditor()`、`BooleanEditor()`、`NumberEditor()`、`TextEditor()`、`SecretEditor()`、`ReadOnlyEditor()` | `ui/SettingsScreen` |
 
 ### A.3 工具与资源
 
@@ -88,7 +91,7 @@
 | `tools/verify-markdown.sh` | Markdown 解析验证：22 条内置用例 + 真实会话表格形状断言（**至少 1 张表、无空表、每行宽度等于列数**） | 退出码 0 / 2（真实数据形状不对）/ 3（输入不可用）/ 4（内置用例失败） |
 | `tools/VerifyMarkdown.kt` | 上面脚本的验证主体（直接调 `data/Markdown.kt` 的纯函数） | — |
 | `tools/verify-files.sh` | 文件类型判定与解码验证（49 条用例） | 退出码 0/1 |
-| `tools/verify-parity.sh` | 第二批对标（P2-1/P2-2/P3）纯函数验证：新建会话档位判定 / 版本比较 / 渠道分流 / SHA256SUMS 解析 / 资产挑选 / 更新说明压平 / 平台与环境探测 | 退出码 0/1 |
+| `tools/verify-parity.sh` | 第二批对标（P2-1/P2-2/P3）纯函数验证：新建会话档位判定 / 版本比较 / 渠道分流 / SHA256SUMS 解析 / 资产挑选 / 更新说明压平 / 平台与环境探测 / **schemastery 摊平与字段映射 / 入口过滤 / 密钥判据 / 夹取** | 退出码 0/1 |
 | `tools/VerifyFileKinds.kt` | 上面脚本的验证主体（直接调 `data/FileKinds.kt` 的纯函数） | — |
 | `tools/VerifyParity.kt` | 上面脚本的验证主体（调 `data/` 里各批纯函数） | — |
 | `tools/IconGen.java` | 生成 5 档应用图标（Java2D） | `build/icons/hicolor/*` |
@@ -174,6 +177,8 @@
 | GET | `settings/models` | 全局模型目录（分组 + 失败项） | `DshApi.listModelCatalog()` |
 | GET | `settings/plugins` | 插件清单（`checkUpdates=1` 才查 npm） | `ApiExt.listPlugins()` |
 | PATCH | `settings/plugins` | 启停插件（只改 `dsh.profile.bundles`，返回 `restartRequired`） | `ApiExt.setPluginLoaded()` |
+| GET | `settings/namespaces` | 通用设置命名空间列表（需 `settings.read`；`hasDocument=false` 是内核没建文档，给空态不报错） | `ApiExt.settingsNamespaces()` |
+| PATCH | `settings/namespaces/{ns}` | 改一个命名空间（需 `settings.write`，≤32 条 op，`expectedRevision` 乐观锁；409 `SETTINGS_CONFLICT` 就地重拉） | `ApiExt.updateSettingsNamespace()` |
 
 ### B.2 REST：已知但**仍未接入**
 
@@ -248,6 +253,7 @@ msi 再 zip。校验先读 `<包名>.sha256`、再读 `SHA256SUMS`；**哈希不
 | 权限档位 / 推理等级 / Agent 预设 | `ui/Composer.kt` 的 `PermissionPill()`、`ui/ChatScreen.kt` 的 `ModelPicker()` 与 `more` 菜单 | 权限切换**走 `/permission <preset>` 命令**（内核没有写端点）；目录候选来自 `chat/permission-presets` |
 | 附件发送与图片显示 | `data/Attachments.kt` + `AppStateProjections.sendMessageWithAttachments()` + `ui/RemoteImage.kt` | 图片内联 base64、文件先换 `receiptId`；`receiptId` 只对同一次 prompt 有效，**不能存起来复用** |
 | Provider / 插件 | `ui/ModelsScreen.kt`、`ui/PluginsScreen.kt` + `AppStateSettings.kt` | 写操作必须带 `expectedRevision`；密钥只写不读 |
+| 通用设置命名空间 | `data/SettingsNamespaces.kt`（schema 摊平纯函数）→ `AppStateSettingsNamespaces.kt`（三层降级）→ `ui/SettingsNamespaces.kt`（表单） | 坑位见 PITFALLS「内核 schema 是 schemastery」；改映射先跑 `tools/verify-parity.sh` |
 | 检查更新 | `data/UpdateChecker.kt`（纯函数 + 网络）→ `AppStateUpdate.kt`（状态机）→ `ui/SettingsScreen.kt` 的 `UpdateCheckSection()` | 只检查 + 下载 + 校验 + 指引，**不热自更新**；改挑选/解析先跑 `tools/verify-parity.sh` |
 | 换主题 / 加主题 | `ui/Theme.kt`：加一个 `Palette` 常量，挂进 `AllPalettes` | 设置页的色卡由 `ThemeChoices` 自动列出来，UI 不用改 |
 | 颜色 / 圆角 / 间距 | 颜色只从 `LocalAppColors` 或 `MaterialTheme.colorScheme` 取；尺寸只从 `Tokens` 取 | **组件里不许出现 `Color(0x…)`**（`docs-check` 不查，靠评审；连接页曾漏掉一处 `Color.White`） |

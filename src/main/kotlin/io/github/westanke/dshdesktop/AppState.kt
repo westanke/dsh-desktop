@@ -31,6 +31,7 @@ import io.github.westanke.dshdesktop.data.ProviderModel
 import io.github.westanke.dshdesktop.data.ProviderSettings
 import io.github.westanke.dshdesktop.data.RootView
 import io.github.westanke.dshdesktop.data.SessionModels
+import io.github.westanke.dshdesktop.data.SettingsNamespaceList
 import io.github.westanke.dshdesktop.data.TodoItem
 import io.github.westanke.dshdesktop.data.TraceTurn
 import io.github.westanke.dshdesktop.data.TrashEntry
@@ -206,6 +207,14 @@ class AppState(
     var updateState by mutableStateOf<UpdateState>(UpdateState.Idle)
         internal set
     internal var updateDownloadJob: Job? = null
+
+    // ── 通用设置命名空间（P2-1，状态机在 AppStateSettingsNamespaces.kt）──────
+    // null = 这条通道不可用（老桥没这条路由 / 设备没有 settings.read），
+    // 入口据此**不画**——给一排拨了没反应的开关比不给更糟。
+    var settingsNamespaces by mutableStateOf<SettingsNamespaceList?>(null)
+        internal set
+    var settingsNamespacesBusy by mutableStateOf(false)
+        internal set
 
     /** 上一份历史里的 `projections` 原文：权限目录晚到时要拿它重算一次档位。 */
     internal var lastProjections: JsonElement? = null
