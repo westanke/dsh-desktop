@@ -33,6 +33,37 @@
 - **未真机验证**：档位胶囊是否随目录刷新、建完真机权限是否即时为新档
   （要连真 bridge 看投影，不是只看 toast）。
 
+### 干了什么（P2-2 · 应用内检查更新）
+
+- `data/UpdateChecker.kt`（新，300 行）：纯函数 + 网络层，**不依赖 Compose/AWT**。
+  渠道按界面语言分流（`zh*` → Gitee，其余 → GitHub）；版本**逐段比数字**——
+  字符串比较会让 `2.2.9 > 2.2.47`（"9" > "4"），这是真实出过的事故；
+  `parseSha256Sums()` 同时吃 `SHA256SUMS` 与单文件 `<包名>.sha256` 两种格式；
+  `pickUpdateAsset()` 按后缀不按下标（Linux `_$arch.deb`、Windows full 优先 msi
+  再 zip）；full/lite 判据是 `java.home` 含不含 `/lib/runtime`；下载 64 KiB 分块，
+  `onProgress(received, total?)`——**Gitee 的 asset 没有 `size`**，total 为 null
+  时界面显示"大小未知"而不是假 0%。
+- `AppStateUpdate.kt`（新，235 行）：六态状态机 `Idle / Checking / UpToDate /
+  Available / Downloading / Ready / Failed`；Compose 状态字段（`updateState` /
+  `updateDownloadJob`）按纪律留在 `AppState.kt` 类内——扩展函数存不了
+  `mutableStateOf`。下载落 `AppStorage.root()/updates/`；哈希不符当场删文件并明说。
+- `ui/SettingsScreen.kt` 关于区插入 `UpdateCheckSection()`：六态 UI，下载中可取消。
+- **边界写死**：只检查 + 下载 + 校验 + 安装指引，**不热自更新**——桌面替换自己
+  正在运行的程序本来就得重启，热更新只会多一种"半新半旧"的死法；静默 `pkexec`
+  装 deb 在 UOS 上只会弹一个用户看不懂的授权框。指引按平台给命令（Linux
+  `sudo dpkg -i` / Windows msi），打开走 `Desktop.open` 不提权。
+- 联调踩到的三个真坑：**`@SerialName("tag_name")`**——kotlinx 默认按 `tagName`
+  找键，不标注会静默解析成空串，然后"永远不是新版"；GitHub `releases/latest`
+  不带 `User-Agent` 直接 403；Gitee v5 API 不要令牌但 asset 无 `size`。
+
+### 测了什么（P2-2）
+
+- `verify-parity.sh` 从 8 项扩到 **36 项**（档位判定 8 + 版本比较 / 渠道分流 /
+  清单解析 / 资产挑选 / 说明压平 / 平台探测 28）；`sha256OfFile` 用已知哈希值交叉验证；
+  **双渠道真网联调**：Gitee / GitHub 均正确解析、挑选到本机适配包、判定不新于 1.0.2；
+  下载 + 进度 + 清单读取 + 取消通路实测通过。
+- **未真机验证**：六态 UI 在真机的实际表现（要连真 bridge 那台机器上点一遍）。
+
 ---
 
 ## v1.0.2 · 消息流对齐官方 Web + 自由复制/引用 + 对标 companion 2.2.52 第一批（2026-10-23）

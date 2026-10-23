@@ -201,6 +201,12 @@ class AppState(
     internal var lastSeenSeq: Int? = null
     internal var baselineCursor: Int? = null
 
+    // ── 检查更新（P2-2，状态机在 AppStateUpdate.kt）────────────────────────
+    // 字段必须留在本类：Compose 的 mutableStateOf 需要真实属性，扩展函数存不了状态。
+    var updateState by mutableStateOf<UpdateState>(UpdateState.Idle)
+        internal set
+    internal var updateDownloadJob: Job? = null
+
     /** 上一份历史里的 `projections` 原文：权限目录晚到时要拿它重算一次档位。 */
     internal var lastProjections: JsonElement? = null
 

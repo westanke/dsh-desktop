@@ -19,7 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -35,9 +38,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.westanke.dshdesktop.AppState
+import io.github.westanke.dshdesktop.UpdateState
+import io.github.westanke.dshdesktop.cancelUpdateDownload
+import io.github.westanke.dshdesktop.checkForUpdate
+import io.github.westanke.dshdesktop.downloadUpdate
+import io.github.westanke.dshdesktop.openDownloadedPackage
+import io.github.westanke.dshdesktop.openReleasePage
+import io.github.westanke.dshdesktop.data.formatFileSize
+import io.github.westanke.dshdesktop.installHint
+import io.github.westanke.dshdesktop.data.summarizeReleaseNotes
 import io.github.westanke.dshdesktop.ConnectionState
 
 /**
@@ -227,7 +240,7 @@ fun SettingsScreen(state: AppState) {
                 InfoRow("运行环境", "${System.getProperty("os.name")} · JDK ${System.getProperty("java.version")}")
                 InfoRow("协议", "dsh-remote-bridge REST /api/v1 + WebSocket /api/v1/events")
                 InfoRow("配置目录", io.github.westanke.dshdesktop.data.AppStorage.root().toString(), mono = true)
-                Spacer(Modifier.height(10.dp))
+                UpdateCheckSection(state, appVersion)
                 Text(
                     "网络层复用 dsh-remote-bridge 的 kotlin-sdk（AGPL-3.0）。本客户端同样以 AGPL-3.0 分发；" +
                         "它不渲染网页，界面由 Skia 直接绘制。",
@@ -236,6 +249,143 @@ fun SettingsScreen(state: AppState) {
                 )
             }
             Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+/**
+ * 检查更新（P2-2）：设置「关于」里的一行 + 各态展示。
+ *
+ * 只手动触发——首版不做启动自动查：国内 Gitee API 有频控，
+ * 每次开软件都请求一次既不礼貌也可能把用户卡在启动流程里。
+ * 下载完只做校验与指引，**不热自更新、不自动提权**（理由见 `AppStateUpdate.kt` 头注）。
+ */
+@Composable
+private fun UpdateCheckSection(state: AppState, currentVersion: String) {
+    val colors = LocalAppColors.current
+    val st = state.updateState
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        HorizontalDivider(color = colors.hairline)
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("检查更新", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "中文界面查 Gitee，英文界面查 GitHub；下载后校验 SHA-256 才给安装入口",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textTertiary,
+                )
+            }
+            TextButton(
+                onClick = { state.checkForUpdate(currentVersion) },
+                enabled = st !is UpdateState.Checking && st !is UpdateState.Downloading,
+            ) {
+                Text(
+                    when (st) {
+                        is UpdateState.Idle -> "检查更新"
+                        else -> "重新检查"
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        when (st) {
+            is UpdateState.Idle -> Unit
+            is UpdateState.Checking -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(6.dp))
+                Text("正在查最新版本…", style = MaterialTheme.typography.labelSmall, color = colors.textSecondary)
+            }
+            is UpdateState.UpToDate -> Text(
+                "已是最新 ${st.current}（来自 ${st.channel.label}）",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+            )
+            is UpdateState.Available -> Column {
+                Text(
+                    "发现新版本 ${st.info.tagName}（当前 ${st.current}）",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                val notes = st.info.body?.let { summarizeReleaseNotes(it) }.orEmpty()
+                if (notes.isNotBlank()) {
+                    Text(
+                        notes,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textTertiary,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    "将下载 ${st.asset.name}" +
+                        (st.asset.size?.let { "（${formatFileSize(it)}）" } ?: "（大小未知）"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textTertiary,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { state.downloadUpdate() }) { Text("下载并校验") }
+                    TextButton(onClick = { state.openReleasePage(st.channel) }) { Text("去 Release 页") }
+                }
+            }
+            is UpdateState.Downloading -> Column {
+                val total = st.total
+                // 渠道没给 Content-Length 时用 -1（不确定态），别画一个假的 0%
+                val fraction = if (total != null && total > 0) {
+                    (st.received.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    -1f
+                }
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (total != null) {
+                        "已下载 ${formatFileSize(st.received)} / ${formatFileSize(total)}"
+                    } else {
+                        "已下载 ${formatFileSize(st.received)}（总大小未知）"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary,
+                )
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { state.cancelUpdateDownload() }) { Text("取消下载") }
+            }
+            is UpdateState.Ready -> Column {
+                Text(
+                    st.installHint(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { state.openDownloadedPackage(st.file) }) {
+                        Text("打开安装")
+                    }
+                    TextButton(onClick = { state.showToast("安装包在 ${st.file.parent}") }) {
+                        Text("打开所在目录")
+                    }
+                }
+            }
+            is UpdateState.Failed -> Column {
+                Text(
+                    st.message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.danger,
+                )
+                st.hint?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = colors.textTertiary)
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    st.channel?.let { channel ->
+                        TextButton(onClick = { state.openReleasePage(channel) }) { Text("打开 Release 页") }
+                    }
+                    TextButton(onClick = { state.checkForUpdate(currentVersion) }) { Text("重试") }
+                }
+            }
         }
     }
 }
