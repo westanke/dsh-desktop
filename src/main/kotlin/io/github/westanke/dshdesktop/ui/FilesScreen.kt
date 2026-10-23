@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -48,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -536,11 +539,15 @@ private fun PreviewPane(state: AppState, modifier: Modifier = Modifier) {
                 FileKind.Other -> UnsupportedPane(extra, state.filesBusy) { state.openEntryExternally(entry) }
                 FileKind.Image -> ImagePane(extra)
                 FileKind.Markdown -> if (state.previewShowSource) {
-                    SourcePane(state.filePreview.orEmpty(), state.filePreviewTruncated)
+                    SourcePane(state.filePreview.orEmpty(), state.filePreviewTruncated, state.previewFocusLine)
                 } else {
-                    MarkdownPreviewPane(state.filePreview.orEmpty(), state.filePreviewTruncated)
+                    MarkdownPreviewPane(
+                        state.filePreview.orEmpty(),
+                        state.filePreviewTruncated,
+                        state,
+                    )
                 }
-                FileKind.Text -> SourcePane(state.filePreview.orEmpty(), state.filePreviewTruncated)
+                FileKind.Text -> SourcePane(state.filePreview.orEmpty(), state.filePreviewTruncated, state.previewFocusLine)
             }
         }
     }
@@ -625,13 +632,14 @@ private fun MiniAction(
  * 编辑草稿的原始字节（Windows 文件保存回去仍是 CRLF）。
  */
 @Composable
-private fun MarkdownPreviewPane(text: String, truncated: Boolean) {
+private fun MarkdownPreviewPane(text: String, truncated: Boolean, state: AppState? = null) {
     Column(Modifier.fillMaxSize()) {
         if (truncated) TruncatedHint()
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             MarkdownText(
                 text.replace("\r\n", "\n").replace('\r', '\n'),
                 Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 18.dp),
+                state = state,
             )
         }
     }
@@ -639,21 +647,39 @@ private fun MarkdownPreviewPane(text: String, truncated: Boolean) {
 
 /** 纯文本 / Markdown 源码：等宽、不做任何解释。 */
 @Composable
-private fun SourcePane(text: String, truncated: Boolean) {
+private fun SourcePane(text: String, truncated: Boolean, focusLine: Int = 0) {
     val colors = LocalAppColors.current
+    // 按行渲染成 LazyColumn：带行号定位时能直接滚到那一行并高亮，
+    // 单个 Text 没法做"跳到第 N 行"。行高用 lineHeight 锁死，视觉与原来一致。
+    val lines = remember(text) { text.split('\n') }
+    val listState = rememberLazyListState()
+    LaunchedEffect(focusLine, text) {
+        if (focusLine > 0 && lines.isNotEmpty()) {
+            listState.animateScrollToItem((focusLine - 1).coerceAtMost(lines.size - 1))
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         if (truncated) TruncatedHint()
-        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Text(
-                text,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp,
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(14.dp),
-            )
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            itemsIndexed(lines) { index, line ->
+                val focused = index + 1 == focusLine
+                Text(
+                    line,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                            else Color.Transparent,
+                        )
+                        .padding(horizontal = 14.dp),
+                )
+            }
         }
     }
 }

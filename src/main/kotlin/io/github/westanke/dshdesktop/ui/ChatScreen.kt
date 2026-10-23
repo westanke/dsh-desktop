@@ -127,9 +127,47 @@ fun ChatScreen(state: AppState) {
             val total = visibleItems.size + if (streaming) 1 else 0
             // 列表前面可能还有"加载更早"一格，滚到底要带上前导偏移
             val leading = if (state.historyHasMore && visibleItems.isNotEmpty()) 1 else 0
+            // 贴底判定：最后一条可见项在最底部附近（±2 容差，容忍小数误差）；
+            // 列表还没首帧（visibleItemsInfo 为空）也算贴底，否则首屏不会滚到底。
+            val atBottom by remember {
+                derivedStateOf {
+                    val info = listState.layoutInfo
+                    val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                    last < 0 || last >= info.totalItemsCount - 2
+                }
+            }
 
             LaunchedEffect(total, state.streamingText.length, state.streamingReasoning.length) {
-                if (total > 0) listState.animateScrollToItem(leading + total - 1)
+                // 只在贴底时自动跟新消息（首屏列表为空也算贴底）。
+                // 用户往上翻了就不拽人——以前任何 total 变化都强拽到底，
+                // 「加载更早」翻出来的内容根本来不及看（APP v2.2.52 `ebe33a6` 同款整改）。
+                if (total > 0 && atBottom) listState.animateScrollToItem(leading + total - 1)
+            }
+            // 发送/插话后强制回底：自己说的话必须看得见
+            LaunchedEffect(state.scrollToBottomTick) {
+                if (state.scrollToBottomTick > 0 && total > 0) listState.animateScrollToItem(leading + total - 1)
+            }
+            // 「加载更早」视口锚定：拼接前记住首条可见项，列表变长后跳回同一条。
+            // 不锚定的话 LazyColumn 按下标定位，前插 N 条整个视口向后错 N 条。
+            var anchorIndex by remember { mutableStateOf(-1) }
+            var anchorOffset by remember { mutableStateOf(0) }
+            var prevCount by remember { mutableStateOf(0) }
+            LaunchedEffect(state.loadingOlder) {
+                if (state.loadingOlder) {
+                    anchorIndex = listState.firstVisibleItemIndex
+                    anchorOffset = listState.firstVisibleItemScrollOffset
+                }
+            }
+            LaunchedEffect(visibleItems.size) {
+                val added = visibleItems.size - prevCount
+                prevCount = visibleItems.size
+                if (anchorIndex >= 0 && added > 0) {
+                    listState.scrollToItem(
+                        (anchorIndex + added).coerceAtMost(listState.layoutInfo.totalItemsCount - 1),
+                        anchorOffset,
+                    )
+                    anchorIndex = -1
+                }
             }
 
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -164,7 +202,7 @@ fun ChatScreen(state: AppState) {
                     // 堆在末尾既看不出是哪一轮的产出，也和上下文脱节。
                     if (streaming) {
                         item(key = "streaming") {
-                            StreamingBubble(state.streamingText)
+                            StreamingBubble(state, state.streamingText)
                         }
                     }
                     if (state.approvals.isNotEmpty()) {
@@ -590,11 +628,11 @@ private fun ModelPicker(state: AppState) {
  * 悬挂的那块在 `Composer` 的 `ReasoningShelf`。
  */
 @Composable
-private fun StreamingBubble(text: String) {
+private fun StreamingBubble(state: AppState, text: String) {
     val colors = LocalAppColors.current
     Column(Modifier.fillMaxWidth()) {
         if (text.isNotEmpty()) {
-            SelectionContainer { MarkdownText(text) }
+            SelectionContainer { MarkdownText(text, state = state) }
         }
         Spacer(Modifier.size(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -604,71 +642,9 @@ private fun StreamingBubble(text: String) {
     }
 }
 
-/** 可折叠的等宽文本块：思考内容、工具分组都用它。 */
 @Composable
-internal fun CollapsibleBlock(
-    title: String,
-    body: String,
-    tone: Color,
-    initiallyExpanded: Boolean = false,
-    trailing: String? = null,
-) {
-    var expanded by remember { mutableStateOf(initiallyExpanded) }
+private fun MessageRow(state: AppState, item: ChatItem) {
     val colors = LocalAppColors.current
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm)),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // 用图标而不是 ▸/▾ 字符：Linux 默认字体经常缺这两个字形，会退化成小圆点
-            Icon(
-                if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (expanded) "收起" else "展开",
-                tint = colors.textTertiary,
-                modifier = Modifier.size(15.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                title,
-                style = MaterialTheme.typography.labelMedium,
-                color = tone,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (trailing != null) {
-                Text(trailing, style = MaterialTheme.typography.labelSmall, color = colors.textTertiary)
-            }
-        }
-        if (expanded) {
-            Box(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                // 思考/工具输出常要整段搬走：包一层让它可选可复制
-                SelectionContainer {
-                    Text(
-                        body.ifBlank { "（无内容）" },
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            lineHeight = 18.sp,
-                        ),
-                        color = colors.textSecondary,
-                        modifier = Modifier.padding(start = 30.dp, end = 12.dp, bottom = 12.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageRow(state: AppState, item: ChatItem) {    val colors = LocalAppColors.current
     when (item) {
         is ChatItem.User -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
             Surface(
@@ -684,7 +660,7 @@ private fun MessageRow(state: AppState, item: ChatItem) {    val colors = LocalA
                     }
                     if (item.text.isNotBlank()) {
                         // 自由选择 + Ctrl+C：MarkdownText 是一串 Text，包一层才可选可复制
-                        SelectionContainer { MarkdownText(item.text) }
+                        SelectionContainer { MarkdownText(item.text, state = state) }
                     }
                 }
             }
@@ -714,7 +690,7 @@ private fun MessageRow(state: AppState, item: ChatItem) {    val colors = LocalA
         }
 
         is ChatItem.Assistant -> Column(Modifier.fillMaxWidth()) {
-            SelectionContainer { MarkdownText(item.text) }
+            SelectionContainer { MarkdownText(item.text, state = state) }
             if (item.text.isNotBlank()) {
                 Spacer(Modifier.size(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

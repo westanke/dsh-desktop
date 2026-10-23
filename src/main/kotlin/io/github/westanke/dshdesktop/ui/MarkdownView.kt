@@ -41,10 +41,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.westanke.dshdesktop.AppState
 import io.github.westanke.dshdesktop.data.ColumnAlign
 import io.github.westanke.dshdesktop.data.MdBlock
 import io.github.westanke.dshdesktop.data.parseInline
 import io.github.westanke.dshdesktop.data.parseMarkdown
+import io.github.westanke.dshdesktop.openFileByPath
 import kotlinx.coroutines.launch
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -60,13 +62,13 @@ import java.awt.datatransfer.StringSelection
  */
 
 @Composable
-fun MarkdownText(text: String, modifier: Modifier = Modifier) {
+fun MarkdownText(text: String, modifier: Modifier = Modifier, state: AppState? = null) {
     val blocks = remember(text) { parseMarkdown(text) }
     val colors = LocalAppColors.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
             when (block) {
-                is MdBlock.Paragraph -> MarkdownParagraph(block.text)
+                is MdBlock.Paragraph -> MarkdownParagraph(block.text, state)
 
                 is MdBlock.Heading -> Text(
                     annotatedFrom(block.text),
@@ -128,7 +130,16 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
                         .background(colors.hairline)
                 )
 
-                is MdBlock.Table -> MarkdownTable(block)
+                // 正文图片：只渲染解析层判定过的（服务端绝对路径 + 位图扩展名）。
+                // 没有 AppState（纯展示场景）降级成链接，跟 http 图一个待遇。
+                is MdBlock.Image ->
+                    if (state != null) {
+                        PathImage(state, block.target, block.alt)
+                    } else {
+                        MarkdownParagraph("[${block.alt}](${block.target})", state)
+                    }
+
+                is MdBlock.Table -> MarkdownTable(block, state)
             }
         }
     }
@@ -142,9 +153,24 @@ private fun headingStyle(level: Int) = when (level) {
     else -> MaterialTheme.typography.titleSmall.copy(fontSize = 13.5.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium)
 }
 
+/**
+ * 会话内链接的统一出口（P1-2）：工作区文件（服务端绝对路径，可带 `:行号` /
+ * `#L行号` 后缀）应用内打开并定位；其余交给浏览器。
+ *
+ * [state] 为 null（文件页预览等无状态场景）一律走浏览器兜底。
+ */
+internal fun openChatLink(state: AppState?, url: String) {
+    val target = io.github.westanke.dshdesktop.data.classifyChatLink(url)
+    if (state == null || target.isExternal) {
+        openExternal(url)
+    } else {
+        state.openFileByPath(target.path, target.lineStart)
+    }
+}
+
 /** 段落：整段一个 Text，链接可点（点空白处不做事）。 */
 @Composable
-private fun MarkdownParagraph(text: String) {
+private fun MarkdownParagraph(text: String, state: AppState? = null) {
     val annotated = annotatedFrom(text)
     var layout by remember(annotated) { mutableStateOf<TextLayoutResult?>(null) }
     Text(
@@ -158,7 +184,7 @@ private fun MarkdownParagraph(text: String) {
                 val offset = result.getOffsetForPosition(position)
                 annotated.getStringAnnotations(URL_TAG, offset, offset)
                     .firstOrNull()
-                    ?.let { openExternal(it.item) }
+                    ?.let { openChatLink(state, it.item) }
             }
         },
     )
@@ -213,7 +239,7 @@ fun annotatedFrom(text: String): AnnotatedString {
  * 窄表自然铺开，宽表可以左右拖 —— 桌面端有鼠标，比压成竖条强。
  */
 @Composable
-private fun MarkdownTable(table: MdBlock.Table) {
+private fun MarkdownTable(table: MdBlock.Table, state: AppState? = null) {
     if (table.columns == 0) return
     val colors = LocalAppColors.current
     // 行宽由 data 层保证已归一（MdBlock.Table 的不变量），这里直接用
@@ -235,6 +261,7 @@ private fun MarkdownTable(table: MdBlock.Table) {
                         width = widths[column],
                         align = table.aligns.getOrElse(column) { ColumnAlign.Start },
                         bold = true,
+                        state = state,
                     )
                 }
             }
@@ -251,6 +278,7 @@ private fun MarkdownTable(table: MdBlock.Table) {
                             width = widths[column],
                             align = table.aligns.getOrElse(column) { ColumnAlign.Start },
                             bold = false,
+                            state = state,
                         )
                     }
                 }
@@ -260,7 +288,7 @@ private fun MarkdownTable(table: MdBlock.Table) {
 }
 
 @Composable
-private fun TableCell(text: String, width: Int, align: ColumnAlign, bold: Boolean) {
+private fun TableCell(text: String, width: Int, align: ColumnAlign, bold: Boolean, state: AppState? = null) {
     val annotated = annotatedFrom(text)
     val colors = LocalAppColors.current
     var layout by remember(annotated) { mutableStateOf<TextLayoutResult?>(null) }
@@ -289,7 +317,7 @@ private fun TableCell(text: String, width: Int, align: ColumnAlign, bold: Boolea
                         val offset = result.getOffsetForPosition(position)
                         annotated.getStringAnnotations(URL_TAG, offset, offset)
                             .firstOrNull()
-                            ?.let { openExternal(it.item) }
+                            ?.let { openChatLink(state, it.item) }
                     }
                 },
         )

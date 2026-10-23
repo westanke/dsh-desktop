@@ -31,6 +31,16 @@ sealed interface MdBlock {
     data object Rule : MdBlock
 
     /**
+     * 独立成行的图片（`![alt](/abs/path.png)`）。
+     *
+     * 只有**渲染得动**的才到这儿：target 是服务端绝对路径、扩展名 Skia 解得开
+     * （判定在 [isRenderableImagePath]，解析层就做完降级，渲染端不用再猜）。
+     * http(s) 图、认不出的 target 一律降级回 [Paragraph]——链接化交给行内扫描，
+     * 原文一个字符都不丢，也绝不留空白。
+     */
+    data class Image(val alt: String, val target: String) : MdBlock
+
+    /**
      * GFM 管道表。
      *
      * [headers] / [rows] 里存的是**原始单元格文本**（`**x**`、`` `y` `` 原样保留），
@@ -230,11 +240,63 @@ fun parseMarkdown(source: String): List<MdBlock> {
             continue
         }
 
+        // 独立成行的图片：渲染得动的出 [MdBlock.Image]；其余整行留在段落里，
+        // 由行内扫描降级成链接。上下文注入（Notice kind=context）不走 MarkdownText，
+        // 天然不会把示例路径渲染成图。
+        if (line.startsWith("![") && parseImageMarkdown(line) != null) {
+            val image = parseImageMarkdown(line)!!
+            flushParagraph()
+            index++
+            if (isRenderableImagePath(image.target)) {
+                blocks += MdBlock.Image(image.alt, image.target)
+            } else {
+                blocks += MdBlock.Paragraph(line)
+            }
+            continue
+        }
+
         paragraph += raw
         index++
     }
     flushParagraph()
     return blocks
+}
+
+// ── 图片 ─────────────────────────────────────────────────────────────────────
+
+/** Skia（`Image.makeFromEncoded`）解得开的位图扩展名。SVG 是矢量，不做。 */
+private val IMAGE_EXTS = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp")
+
+/** 一条独立图片语法拆出来的部分。 */
+data class MdImage(val alt: String, val target: String)
+
+/**
+ * 解析一行 `![alt](target "title")`。
+ *
+ * 允许路径含空格（模型很爱写 `/path/with space.png`）；`<…>` 包裹与 `"title"`
+ * 后缀都剥掉。**整行**必须是这一个图片（前后没有别的文字）才认——
+ * 夹在正文里的图走行内降级，不在这里处理。
+ */
+fun parseImageMarkdown(line: String): MdImage? {
+    if (!line.startsWith("![") || !line.endsWith(")")) return null
+    val close = line.indexOf("](", 2)
+    if (close < 0) return null
+    val alt = line.substring(2, close)
+    var target = line.substring(close + 2, line.length - 1).trim()
+    target = target.replace(Regex("""\s+"[^"]*"\s*$"""), "").trim()
+    if (target.length > 1 && target.startsWith("<") && target.endsWith(">")) {
+        target = target.substring(1, target.length - 1).trim()
+    }
+    if (target.isBlank() || target.endsWith(")") && target.contains("](")) return null
+    return MdImage(alt, target)
+}
+
+/** target 能不能直接取字节渲染：服务端绝对路径 + 已知图片扩展名。 */
+fun isRenderableImagePath(target: String): Boolean {
+    if (!target.startsWith("/")) return false
+    val path = target.substringBefore('?').substringBefore('#')
+    val ext = path.substringAfterLast('.', "").lowercase()
+    return ext in IMAGE_EXTS && path.substringAfterLast('/').contains('.')
 }
 
 /** 任务列表：`[ ] 待办` / `[x] 已办`。不是任务就原样返回。 */
@@ -420,6 +482,19 @@ private fun scanInline(
                     flush()
                     scanInline(source.substring(i + 1, end), style.copy(italic = true), out, depth + 1)
                     i = end + 1
+                    continue
+                }
+            }
+
+            // 行内图片 `![alt](target)`：渲染不进 AnnotatedString（位图嵌不进文本流），
+            // 一律降级成指向 target 的链接——能点、能看路径，绝不留空白。
+            if (ch == '!' && i + 1 < source.length && source[i + 1] == '[') {
+                val img = parseImageMarkdown(source.substring(i))
+                if (img != null) {
+                    flush()
+                    val label = img.alt.ifBlank { img.target }
+                    out += InlineSpan(label, style.bold, style.italic, style.code, style.strike, img.target)
+                    i = source.length
                     continue
                 }
             }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -504,6 +505,70 @@ internal fun messageTime(time: Long): String =
     if (time <= 0) ""
     else java.time.format.DateTimeFormatter.ofPattern("HH:mm")
         .format(java.time.Instant.ofEpochMilli(time).atZone(java.time.ZoneId.systemDefault()))
+
+
+/** 可折叠的等宽文本块：思考内容、工具分组都用它。 */
+@Composable
+internal fun CollapsibleBlock(
+    title: String,
+    body: String,
+    tone: Color,
+    initiallyExpanded: Boolean = false,
+    trailing: String? = null,
+) {
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
+    val colors = LocalAppColors.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(colors.mutedSurface, RoundedCornerShape(Tokens.radiusSm)),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 用图标而不是 ▸/▾ 字符：Linux 默认字体经常缺这两个字形，会退化成小圆点
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = colors.textTertiary,
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                title,
+                style = MaterialTheme.typography.labelMedium,
+                color = tone,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (trailing != null) {
+                Text(trailing, style = MaterialTheme.typography.labelSmall, color = colors.textTertiary)
+            }
+        }
+        if (expanded) {
+            Box(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                // 思考/工具输出常要整段搬走：包一层让它可选可复制
+                SelectionContainer {
+                    Text(
+                        body.ifBlank { "（无内容）" },
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                        ),
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(start = 30.dp, end = 12.dp, bottom = 12.dp),
+                    )
+                }
+            }
+        }
+    }
+}
 
 /** 整条消息转引用块（`> ` 前缀），追加进输入框时和原文格式分得清。 */
 internal fun quoteText(raw: String): String =

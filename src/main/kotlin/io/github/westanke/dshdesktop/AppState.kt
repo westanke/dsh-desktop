@@ -21,6 +21,7 @@ import io.github.westanke.dshdesktop.data.JobView
 import io.github.westanke.dshdesktop.data.ModelSelection
 import io.github.westanke.dshdesktop.data.ModelCatalog
 import io.github.westanke.dshdesktop.data.mergeDeliverableCards
+import io.github.westanke.dshdesktop.data.mergeLatestPage
 import io.github.westanke.dshdesktop.data.PendingApproval
 import io.github.westanke.dshdesktop.data.PendingAttachment
 import io.github.westanke.dshdesktop.data.PermissionCatalog
@@ -218,6 +219,15 @@ class AppState(
         composerInsert = text
     }
 
+    /**
+     * 输入框提交后让消息流回底部的信号（计数器）。
+     * 自动跟随只在"贴底"时生效——用户往上翻着旧消息发送，也得看见自己这条落底。
+     */
+    var scrollToBottomTick by mutableStateOf(0)
+    fun requestScrollBottom() {
+        scrollToBottomTick++
+    }
+
     /** 这个会话的后台任务（`jobs`）。只有真在看的时候才轮询，平时留空。 */
     var jobs by mutableStateOf<List<JobView>>(emptyList())
     var jobsBusy by mutableStateOf(false)
@@ -254,6 +264,12 @@ class AppState(
 
     /** 预览时拿到的 ETag：保存要带它，服务端才敢确认"你改的就是我刚给的那份"。 */
     var filePreviewEtag by mutableStateOf<String?>(null)
+
+    /**
+     * 文本预览要定位到的行号（0 = 不定位）。会话里 `file.md:24` / `file.md#L24`
+     * 这类后缀点进来时由 [AppState.openFileByPath] 设置，预览加载完滚动高亮到该行。
+     */
+    var previewFocusLine by mutableStateOf(0)
 
     /** 编辑器里的草稿；null = 没在编辑（列表点开只是预览）。 */
     var fileDraft by mutableStateOf<String?>(null)
@@ -548,8 +564,17 @@ class AppState(
         loadCommands(sessionId)
     }
 
-    fun loadHistory(sessionId: String) {
-        loadingHistory = true
+    /**
+     * 拉历史。
+     *
+     * @param incremental 实时刷新（提交/轮结束/失败等事件触发）用 true：
+     *   已加载的列表与「加载更早」翻出来的旧页**合并**而不是整包替换，
+     *   分页游标也不动 —— 否则用户往上翻了半天，一个事件下来全被抹掉
+     *   （APP v2.2.52 `83b808d` 修的同款）。打开会话/手动刷新用 false，整包替换。
+     */
+    fun loadHistory(sessionId: String, incremental: Boolean = false) {
+        val hadItems = chatItems.isNotEmpty()
+        loadingHistory = !incremental
         chatError = null
         scope.launch {
             runCatching {
@@ -568,14 +593,22 @@ class AppState(
                 }
             }.onSuccess { page ->
                 if (selectedSessionId == sessionId) {
-                    chatItems = page.items
-                    historyHasMore = page.hasMore
-                    oldestSeq = page.oldest
-                    sessionDeliverables = deliverablesIn(page.rawEvents)
+                    if (incremental && hadItems) {
+                        chatItems = mergeLatestPage(chatItems, page)
+                        // 交付物并集：这一页只看得到最新窗口，回溯扫出来的旧卡不能丢
+                        sessionDeliverables =
+                            (sessionDeliverables + deliverablesIn(page.rawEvents)).distinctBy { it.path }
+                    } else {
+                        chatItems = page.items
+                        historyHasMore = page.hasMore
+                        oldestSeq = page.oldest
+                        sessionDeliverables = deliverablesIn(page.rawEvents)
+                    }
                     mergeScannedDeliverables()
                     applyProjections(sessionId, page)
                     // 首页只是"最近一段"，早期交付物不在这儿；后台往回翻几页把它们捞回来。
-                    if (page.hasMore && page.oldest != null) scanDeliverables(sessionId, page.oldest!!)
+                    // 增量刷新不重扫：已加载窗口更深，重扫只会重复浪费请求。
+                    if (!incremental && page.hasMore && page.oldest != null) scanDeliverables(sessionId, page.oldest!!)
                 }
             }.onFailure {
                 if (selectedSessionId == sessionId) chatError = human(it)
@@ -815,7 +848,8 @@ class AppState(
                     return
                 }
                 val cursor = (data["cursor"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
-                if (noteBaseline(cursor)) loadHistory(sessionId)
+                // 断档缺口在尾部（基线 - 本地最大 seq），最新窗口就能补上；更早页不动
+                if (noteBaseline(cursor)) loadHistory(sessionId, incremental = true)
             }
 
             "chat.message.delta" -> {
@@ -836,7 +870,7 @@ class AppState(
                 // 提交意味着 REST 历史已经有这条正文，流式缓冲可以清空
                 streamingText = ""
                 streamingReasoning = ""
-                loadHistory(sessionId)
+                loadHistory(sessionId, incremental = true)
                 refreshSessions()
             }
 
@@ -848,7 +882,7 @@ class AppState(
                     if (status != "running") {
                         streamingText = ""
                         streamingReasoning = ""
-                        loadHistory(sessionId)
+                        loadHistory(sessionId, incremental = true)
                     }
                 }
             }
@@ -860,7 +894,7 @@ class AppState(
                 val message = failure?.str("message") ?: "本轮执行失败"
                 if (sessionId == selectedSessionId) {
                     chatError = message
-                    loadHistory(sessionId)
+                    loadHistory(sessionId, incremental = true)
                 }
             }
 

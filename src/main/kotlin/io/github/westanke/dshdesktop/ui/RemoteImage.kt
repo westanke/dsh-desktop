@@ -5,8 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +27,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import io.github.westanke.dshdesktop.AppState
 import io.github.westanke.dshdesktop.data.readAttachment
+import io.github.westanke.dshdesktop.data.resolvePath
+import io.github.westanke.dshdesktop.openFileByPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -105,6 +110,56 @@ fun ImageStrip(state: AppState, sessionId: String?, ids: List<String>) {
     if (ids.isEmpty()) return
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         ids.forEach { id -> RemoteImage(state, sessionId, id, size = 120) }
+    }
+}
+
+/**
+ * 正文 Markdown 里的图片（P1-1）：target 是**服务端绝对路径**。
+ *
+ * 通路：`roots/resolve` 翻译成 rootId + 相对路径 → `readFile` 取字节 → Skia 解码。
+ * 与附件的 [RemoteImage] 共用同一份 LRU 缓存（key 加 `path|` 前缀区分），
+ * 解码失败也缓存——反复重试一张坏图只是白烧请求。
+ *
+ * **不留空白**：加载中/失败都降级成一条可点的链接，跳文件页看。
+ */
+@Composable
+fun PathImage(state: AppState, path: String, alt: String) {
+    val colors = LocalAppColors.current
+    val cacheKey = "path|$path"
+    val bitmap by produceState<ImageBitmap?>(initialValue = imageCache[cacheKey], key1 = cacheKey) {
+        if (value != null || failedIds[cacheKey] == true) return@produceState
+        val loaded = runCatching {
+            withContext(Dispatchers.IO) {
+                val resolved = state.client().resolvePath(path)
+                state.client().readFile(resolved.rootId, resolved.path).bytes
+            }
+        }.getOrNull()?.let { bytes ->
+            runCatching { org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+        }
+        if (loaded == null) failedIds[cacheKey] = true else imageCache[cacheKey] = loaded
+        value = loaded
+    }
+
+    val image = bitmap
+    if (image != null) {
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
+            Image(
+                bitmap = image,
+                contentDescription = alt.ifBlank { "会话图片" },
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 420.dp)
+                    .clickable { ImagePreview.open(image) },
+            )
+        }
+    } else {
+        Text(
+            if (failedIds[cacheKey] == true) "🖼 $alt（点开文件页查看）" else "🖼 $alt（读取中…）",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { state.openFileByPath(path) },
+        )
     }
 }
 

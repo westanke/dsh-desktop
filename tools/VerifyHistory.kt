@@ -97,4 +97,38 @@ fun main(args: Array<String>) {
     }
     println()
     println("✓ 通过（${items.size} 条可渲染）")
+    verifyMergeLatestPage()
+}
+
+/**
+ * P0-1 回归（APP v2.2.52 `83b808d` 同款 bug 的桌面端防线）：
+ * 用户「加载更早」翻出旧页后，一次实时刷新（committed/轮结束/失败）**不许**
+ * 把翻出来的旧条目抹掉 —— `mergeLatestPage` 必须保留 `page.oldest` 之前的一切。
+ */
+private fun verifyMergeLatestPage() {
+    fun tool(id: String, seq: Int) = ChatItem.Tool(id, seq, "call-$id", "bash", "ls", "ok", false, 100L)
+    // 已加载 = 更早两页（翻出来的） + 最新窗口；刷新页只覆盖 seq >= 10 的最新一段
+    val loaded = listOf(
+        ChatItem.User("u1", 1, "早", 0L),
+        tool("t1", 2),
+        ChatItem.User("u2", 10, "新", 0L),
+    )
+    val page = io.github.westanke.dshdesktop.data.HistoryPage(
+        items = listOf(
+            ChatItem.User("u2", 10, "新", 0L),
+            ChatItem.Assistant("a1", 11, "回答", 0L),
+            tool("t2", 12),
+        ),
+        hasMore = false, // 这页自己没有更早 —— 但用户翻出的更早页不能因此被抹
+        oldest = 10,
+    )
+    val merged = io.github.westanke.dshdesktop.data.mergeLatestPage(loaded, page)
+    check(merged.map { it.id } == listOf("u1", "t1", "u2", "a1", "t2")) {
+        "刷新抹掉了「加载更早」的成果：$merged"
+    }
+    // 空列表 = 首次加载，整包替换
+    check(io.github.westanke.dshdesktop.data.mergeLatestPage(emptyList(), page).size == 3)
+    // 页没给 oldest（全量）→ 直接替换
+    check(io.github.westanke.dshdesktop.data.mergeLatestPage(loaded, page.copy(oldest = null)).size == 3)
+    println("✓ mergeLatestPage：翻页成果在刷新后保留（P0-1）")
 }

@@ -308,6 +308,33 @@ fun chatStats(items: List<ChatItem>): ChatStats {
 /** 历史里内核持久化的交付物事件名（原样透传，磁盘上就是它）。 */
 const val DELIVERABLE_EVENT = "deliverables/presented"
 
+/**
+ * 把「最新一段」历史合并进**已加载**的列表 —— 实时刷新（`chat.message.committed`、
+ * 轮结束、失败）走的都是它，**不能整包替换**。
+ *
+ * 背景是 APP v2.2.52 `83b808d` 修的同款 bug：用户点「加载更早」翻出几页旧消息后，
+ * 任何一个触发刷新的事件都会把列表换成"最近一段"，翻页成果全部蒸发、屏幕闪成空白。
+ *
+ * 规则：
+ * - `page.oldest`（本页最小 seq）**之前**的条目是用户翻出来的更早页，原样保留；
+ *   按 id 去重一次，防服务端在窗口边界把同一条多给一遍；
+ * - 窗口内的条目以服务端页为准整段替换 —— TurnRun/ToolGroup 的折叠 id 会随轮
+ *   延伸而变化，不能拿 id 判等，必须按 seq 窗口切；
+ * - 本地乐观插入的未确认消息（seq = [Int.MAX_VALUE]）落在窗口外会被丢弃：
+ *   提交事件意味着 REST 历史已含这条正文，重取一定拿得到。
+ *
+ * @param currentHasMore 当前是否还有更早页可翻。合并**不改**分页游标——这一页
+ *   只是最新窗口，它的 `hasMore` 说的是"它自己"前面还有没有，不是全量历史的。
+ */
+fun mergeLatestPage(current: List<ChatItem>, page: HistoryPage): List<ChatItem> {
+    val windowStart = page.oldest ?: return page.items
+    if (current.isEmpty()) return page.items
+    val kept = current.filter { it.seq < windowStart }
+    val pageIds = page.items.mapTo(HashSet()) { it.id }
+    val older = kept.filterNot { it.id in pageIds }
+    return if (older.isEmpty()) page.items else older + page.items
+}
+
 /** 实时流里的名字：桥接的 `normalizeDshEvent` 给它加了 `chat.` 前缀。 */
 const val DELIVERABLE_EVENT_REALTIME = "chat.deliverables.presented"
 

@@ -5,6 +5,31 @@
 
 ---
 
+## v1.0.1 后续 3 · 第一批对标 companion 2.2.52（2026-10-23，未打 tag）
+
+### 改了哪些文件
+
+| 文件 | 变化 |
+| --- | --- |
+| `data/ChatHistory.kt`（570→597） | +`mergeLatestPage()`：按 seq 窗口合并最新页，保住更早页 |
+| `AppState.kt`（919→953） | `loadHistory(incremental)`；`scrollToBottomTick`；事件驱动刷新改增量 |
+| `ui/ChatScreen.kt`（781→757） | 贴底才自动跟随；「加载更早」视口锚定；`CollapsibleBlock` 挪去 ToolBlocks |
+| `ui/Composer.kt`（667→669） | 提交后 `requestScrollBottom()` |
+| `data/Markdown.kt`（489→564） | +`MdBlock.Image`、`parseImageMarkdown()`、`isRenderableImagePath()`；行内 `![` 降级链接 |
+| `ui/RemoteImage.kt`（127→182） | +`PathImage()`：按绝对路径取字节渲染正文图，共用 LRU |
+| `data/ChatLink.kt`（新，55） | `classifyChatLink()`：链接分类 + 行号后缀 |
+| `ui/MarkdownView.kt`（396→424） | `state` 贯穿；`openChatLink()` 路由；Image 分支 |
+| `ui/FilesScreen.kt`（754→780） | `SourcePane` 按行 LazyColumn + 行号定位高亮 |
+| `AppStateFiles.kt` | `openFileByPath(path, line)`；`previewEntry` 重置 `previewFocusLine` |
+| `tools/VerifyMarkdown.kt` | 内置用例 18→33（图片/降级/链接分类/行号） |
+| `tools/VerifyHistory.kt` | +`verifyMergeLatestPage()`（P0-1 回归） |
+
+### 没做的
+
+- P2 两项与 P3 照旧排后；PARITY.md 全量矩阵等 1.0.2 发版前并表。
+
+---
+
 ## v1.0.1 后续 2 · 自由复制 + 引用到发言 + 上下文注入开关（2026-10-22，未打 tag）
 
 ### 干了什么

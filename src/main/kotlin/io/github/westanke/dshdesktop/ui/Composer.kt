@@ -109,6 +109,8 @@ fun Composer(state: AppState) {
         if (draft.isBlank() && state.attachments.isEmpty()) return
         state.sendMessageWithAttachments(draft, steer)
         draft = ""
+        // 自己说的话必须看得见：哪怕翻在旧消息上也回底
+        state.requestScrollBottom()
     }
 
     // 消息气泡点「引用」：文本追加进输入框（换行衔接，别粘成一坨）

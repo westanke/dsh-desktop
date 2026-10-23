@@ -6,6 +6,42 @@
 
 ---
 
+## v1.0.1 后续 3 · 第一批对标 companion 2.2.52（2026-10-23，未打 tag）
+
+**基于什么**：`PARITY-VS-COMPANION-2.2.52.md` 第一批清单——P0-1 刷新历史不抹旧消息、
+P1-1 正文 Markdown 图片、P1-2 文件链接应用内定位 + 行号后缀。
+
+**干了什么**
+
+1. **P0-1**：`data/ChatHistory.kt` 新增纯函数 `mergeLatestPage()`——实时刷新
+   （`chat.message.committed` / 轮结束 / 轮失败 / 断档重取）一律 `loadHistory(incremental=true)`，
+   按 seq 窗口合并：`page.oldest` 之前的条目（用户翻出的更早页）原样保留，
+   窗口内以服务端页为准整段替换（TurnRun/ToolGroup 的折叠 id 随轮延伸会变，不能按 id 判等）；
+   分页游标不动；交付物并集。视口：只在**贴底**时自动跟新消息（±2 容差）；
+   「加载更早」前插时锚定首条可见项（记下标+偏移，拼接后 `scrollToItem` 跳回同一条）；
+   发送/插话后强制回底（`AppState.scrollToBottomTick`）。
+2. **P1-1**：`data/Markdown.kt` 新增 `MdBlock.Image` + `parseImageMarkdown()` +
+   `isRenderableImagePath()`——整行图片且 target 是服务端绝对路径 + 位图扩展名
+   （png/jpg/jpeg/gif/webp/bmp）才出图节点；http 图/未知扩展名/夹在正文里的行内图
+   一律降级链接（行内 `![` 分支），原文不丢、不留空白。
+   `ui/RemoteImage.kt` 新增 `PathImage()`：resolvePath → readFile → Skia 解码，
+   与附件图共用 LRU 缓存，失败降级可点链接。`MarkdownText` 增加 `state` 参数贯穿。
+3. **P1-2**：新增 `data/ChatLink.kt` `classifyChatLink()`——剥 autolink/file:// 前缀，
+   解析 `:24` / `:24-30` / `#L24` / `#L24-L30` 行号后缀；工作区绝对路径走
+   `openFileByPath(path, line)` 应用内打开，其余浏览器。`FilesScreen.SourcePane`
+   改按行 LazyColumn：`previewFocusLine` 定位并高亮该行；`previewEntry` 重置为 0。
+
+**测了什么**
+
+- `verify-markdown.sh` 内置 33 项全过（新增图片/链接分类/行号 15 项）；
+  `verify-history.sh` 真实 298 事件通过 + `mergeLatestPage` 合并回归（翻页成果在刷新后保留）。
+- `docs-check.sh` 30/30（ChatLink.kt 已登记 CODEMAP；ChatScreen 挪出 CollapsibleBlock 回到预算内）。
+- 真机待验：翻页后等一轮跑完旧消息还在、图片出图、`:24` 链接跳行。
+
+**没做的**：P2-1 命名空间表单（等确认桥 v2.6.0）、P2-2 检查更新、P3 新建会话选档位。
+
+---
+
 ## v1.0.1 后续 2 · 自由复制 + 引用到发言 + 上下文注入开关（2026-10-22，未打 tag）
 
 **基于什么**：用户提两点——①会话里没法自由复制，选中复制、能加到发言去；

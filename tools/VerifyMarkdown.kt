@@ -1,5 +1,6 @@
 import io.github.westanke.dshdesktop.data.ColumnAlign
 import io.github.westanke.dshdesktop.data.MdBlock
+import io.github.westanke.dshdesktop.data.classifyChatLink
 import io.github.westanke.dshdesktop.data.normalizeRow
 import io.github.westanke.dshdesktop.data.parseInline
 import io.github.westanke.dshdesktop.data.parseMarkdown
@@ -202,4 +203,39 @@ private fun runCases() {
     val headings = blocksOf("# 一\n## 二\n###### 六\n####### 七")
     expect("1/2/6 级标题都识别", headings.count { it is MdBlock.Heading } == 3,
         "${headings.map { it::class.simpleName }}")
+
+    // 14. 独立图片（P1-1）：可渲染的出 Image 节点
+    val img = blocksOf("![截图](/home/u/shot 1.png)").filterIsInstance<MdBlock.Image>()
+    expect("独立图片出 Image 节点", img.size == 1, "${img.size}")
+    expect("alt 与 target 正确", img.firstOrNull()?.alt == "截图" && img.firstOrNull()?.target == "/home/u/shot 1.png",
+        "${img.firstOrNull()}")
+    // 带尖括号与 title
+    val img2 = blocksOf("![a](</p/b.png> \"标题\")").filterIsInstance<MdBlock.Image>()
+    expect("尖括号与 title 被剥掉", img2.firstOrNull()?.target == "/p/b.png", "${img2.firstOrNull()?.target}")
+
+    // 15. http 图 / 未知扩展名降级成段落（原文保留，不留空白）
+    val http = blocksOf("![网图](https://x.y/a.png)")
+    expect("http 图降级段落", http.size == 1 && http[0] is MdBlock.Paragraph, "${http.map { it::class.simpleName }}")
+    val unknown = blocksOf("![日志](/var/log/a.log)")
+    expect("非图片扩展名降级段落", unknown.size == 1 && unknown[0] is MdBlock.Paragraph,
+        "${unknown.map { it::class.simpleName }}")
+
+    // 16. 夹在正文里的行内图降级成链接（不吞原文）
+    val inline = parseInline("看这张 ![图](/p/c.png) 就明白了")
+    expect("行内图降级为链接", inline.any { it.url == "/p/c.png" }, "$inline")
+    expect("行内图不吞原文", inline.joinToString("") { it.text }.contains("看这张"))
+
+    // 17. 链接分类与行号后缀（P1-2）
+    expect("绝对路径判为工作区文件", !classifyChatLink("/a/b/c.md").isExternal)
+    val l1 = classifyChatLink("/a/b/c.md:24")
+    expect("冒号行号", l1.lineStart == 24 && l1.lineEnd == 24 && l1.path == "/a/b/c.md", "$l1")
+    val l2 = classifyChatLink("/a/b/c.md:24-30")
+    expect("冒号行号区间", l2.lineStart == 24 && l2.lineEnd == 30, "$l2")
+    val l3 = classifyChatLink("/a/b/c.md#L24")
+    expect("#L 行号", l3.lineStart == 24 && l3.lineEnd == 24, "$l3")
+    val l4 = classifyChatLink("/a/b/c.md#L24-L30")
+    expect("#L 行号区间", l4.lineStart == 24 && l4.lineEnd == 30 && l4.path == "/a/b/c.md", "$l4")
+    expect("http 仍判外链", classifyChatLink("https://x.y/a.png").isExternal)
+    expect("相对路径判外链（没有 cwd 别猜）", classifyChatLink("docs/b.md").isExternal)
+    expect("无后缀的路径行号为空", classifyChatLink("/a/b/c.md").lineStart == null)
 }

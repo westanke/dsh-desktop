@@ -85,6 +85,7 @@ fun AppState.previewEntry(entry: FileEntry) {
     fileDraft = null
     previewExtra = null
     previewShowSource = false
+    previewFocusLine = 0
     val rootId = activeRootId ?: return
     if (entry.kind == "directory") return
 
@@ -330,7 +331,7 @@ fun AppState.openAbsolutePath(absolutePath: String, preview: Boolean = false) {
  * 三个兜底：解析失败说人话；路径指向目录就退回 [openDirectory]；
  * 列父目录找不到这个条目（文件已被删/移走）也退回列目录并说明。
  */
-fun AppState.openFileByPath(absolutePath: String) {
+fun AppState.openFileByPath(absolutePath: String, line: Int? = null) {
     scope.launch {
         val prepared = runCatching {
             withContext(Dispatchers.IO) {
@@ -376,6 +377,8 @@ fun AppState.openFileByPath(absolutePath: String) {
         // 否则目录栏收起后预览区还停在上一个文件上，看着像点错了。
         if (inline) {
             previewEntry(entry)
+            // 会话里 `:24` / `#L24` 后缀带来的行号：预览加载完滚动定位（P1-2）
+            previewFocusLine = line?.takeIf { it > 0 } ?: 0
         } else {
             previewEntry(entry)
             openEntryExternally(entry)
