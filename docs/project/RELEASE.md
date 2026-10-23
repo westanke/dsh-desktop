@@ -137,6 +137,16 @@ gh workflow run mirror-sync.yml --ref main     # 它的 releases job 会把最�
 `gh run view <id>` 里 releases job 的日志会逐件打 `↑ 上传 … / ✓ 已上传 …`，
 卡在谁身上一眼可见。
 
+**本机补发时别踩这个**：`dist/` 是新旧版本共存的，`--local dist` 会把上个版本的包也传进
+这个 tag（v1.0.2 就传进了 1.0.1 的三个包）。脚本现在按「文件名里的版本号必须等于 tag」
+过滤，只警告不报错。真传错了没法单个删——Gitee 的 `assets` 只给 name/url、不给附件 id，
+只能整个发行版删掉重建：
+
+```sh
+curl -s -X DELETE "https://gitee.com/api/v5/repos/westanke/dsh-desktop/releases/<id>?access_token=$GITEE_TOKEN"
+# 204 即删掉；再用 --local 重跑一次会自动重建（源码包 zip/tar.gz 会再生）
+```
+
 ## ⑦ 交付清单
 
 给用户时说清三件事，别只说"修好了"：

@@ -28,6 +28,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -156,12 +157,26 @@ def sha256_of(path: str) -> str:
 
 
 # ── 主流程 ────────────────────────────────────────────────────────────────
-def collect_local(directory: str, include: List[str]) -> List[str]:
+VERSION_IN_NAME = re.compile(r"\d+\.\d+\.\d+")
+
+
+def collect_local(directory: str, include: List[str], tag: str) -> List[str]:
+    """收集目录里的产物，顺手挡掉**别的版本**的遗留文件。
+
+    dist/ 是新旧版本共存的（打新版不会删旧包），`--local dist` 一把梭会把上个版本的
+    包也传进这个 tag 的发行版——v1.0.2 补发时踩过：Gitee 上多出 1.0.1 的三个包。
+    文件名里的版本号与 tag 不一致的一律跳过，只警告不报错。
+    """
+    tag_version = tag.lstrip("vV")
     found = []
     for name in sorted(os.listdir(directory)):
         if name == SUMS_NAME:
             continue
         if include and not any(fnmatch.fnmatch(name, pat) for pat in include):
+            continue
+        versions = set(VERSION_IN_NAME.findall(name))
+        if versions and tag_version not in versions:
+            log(f"· 跳过其它版本的遗留文件 {name}（本 tag 是 {tag}）")
             continue
         full = os.path.join(directory, name)
         if os.path.isfile(full):
@@ -195,7 +210,7 @@ def main() -> int:
     work = tempfile.mkdtemp(prefix="gitee-release-")
     files: List[str] = []
     if args.local:
-        files = collect_local(args.local, args.include)
+        files = collect_local(args.local, args.include, args.tag)
         if not files:
             log(f"::error::{args.local} 里没有匹配的文件")
             return 1

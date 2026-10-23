@@ -39,6 +39,10 @@ GitHub Release + Gitee 发行版（`sync-release-to-gitee` / mirror-sync 补）�
 `sync-release-to-gitee.py` 改为单件超时（240s）+ 重试 3 次（4xx 不重试）、上传前先打日志，
 `publish` 超时放到 40 分钟；补发走 `gh workflow run mirror-sync.yml --ref main`。
 
+**补发时的第二个坑**：本机 `--local dist` 把 1.0.1 的三个包也传进了 v1.0.2 发行版
+（dist 里新旧共存）。Gitee 附件没有 id、删不掉单个，只能 `DELETE /releases/{id}`（204）
+后重建；脚本已按「文件名版本号 == tag」过滤，这是防止重犯的那道闸。
+
 ---
 
 ## v1.0.1 后续 3 · 第一批对标 companion 2.2.52（2026-10-23，未打 tag）
