@@ -22,7 +22,7 @@
 注意 **Gitee 仓库附件 1 GB 总配额**：v1.0.2 装齐时撑爆，删掉了最旧的 v1.0.0 发行版腾位
 （GitHub 上仍有历史版本）。后续"Gitee 只留最新一个完整版本"是常态，详见 `RELEASE.md` ⑥′。
 
-**测了什么**：见下一节三批的验证（docs-check 30/30、verify-markdown 33 项、verify-history 合并回归）。
+**测了什么**：见下一节三批的验证（docs-check 30/30、verify-markdown 37 项、verify-history 合并回归）。
 
 ---
 
@@ -53,7 +53,7 @@ P1-1 正文 Markdown 图片、P1-2 文件链接应用内定位 + 行号后缀。
 
 **测了什么**
 
-- `verify-markdown.sh` 内置 33 项全过（新增图片/链接分类/行号 15 项）；
+- `verify-markdown.sh` 内置 37 项全过（新增图片/链接分类/行号 15 项）；
   `verify-history.sh` 真实 298 事件通过 + `mergeLatestPage` 合并回归（翻页成果在刷新后保留）。
 - `docs-check.sh` 30/30（ChatLink.kt 已登记 CODEMAP；ChatScreen 挪出 CollapsibleBlock 回到预算内）。
 - 真机待验：翻页后等一轮跑完旧消息还在、图片出图、`:24` 链接跳行。

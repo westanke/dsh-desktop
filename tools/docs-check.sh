@@ -8,6 +8,8 @@
 #   4. PITFALLS.md 的条目与 AGENTS.md 第 7 节索引是否一一同名
 #   5. 800 行/文件预算（超预算必须在 TECH-DEBT 里登记）
 #   6. README 里不许留占位符
+#   7. CODEMAP 与代码双向一致
+#   8. 纯逻辑测试套件离线可跑（tools/test.sh，约 30 秒）
 #
 # 用法：tools/docs-check.sh        全绿退出 0，任一 FAIL 退出 1
 set -uo pipefail
@@ -46,7 +48,7 @@ def read(rel):
 
 
 # ── 1. 文档齐全 ────────────────────────────────────────────────────────────
-print("▸ 1/7 文档齐全")
+print("▸ 1/8 文档齐全")
 DOCS = [
     "AGENTS.md",
     "README.md",
@@ -73,7 +75,7 @@ for name in sorted(referenced):
 
 # ── 2. 版本号 ──────────────────────────────────────────────────────────────
 # 单一来源是仓库根的 version.txt：两个构建脚本都从它取，文档里的写法要跟它对上。
-print("▸ 2/7 版本号一致")
+print("▸ 2/8 版本号一致")
 pkg = read("tools/package.sh") or ""
 bld = read("tools/build.sh") or ""
 ver = (read("version.txt") or "").strip()
@@ -96,7 +98,7 @@ if ver and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", ver):
           f'VERSION_FALLBACK = "{ver}"' in settings, f'应为 VERSION_FALLBACK = "{ver}"')
 
 # ── 3. PARITY 统计 ─────────────────────────────────────────────────────────
-print("▸ 3/7 PARITY 统计与表格相符")
+print("▸ 3/8 PARITY 统计与表格相符")
 parity = read("docs/project/PARITY.md") or ""
 section = parity.split("## 二、能力矩阵", 1)[-1].split("## 三、", 1)[0]
 counts = {"✓": 0, "△": 0, "✗": 0}
@@ -113,8 +115,8 @@ else:
           declared == counts,
           f"声明 {declared}，实际 {counts}")
 
-# ── 4. 坑位同名 ────────────────────────────────────────────────────────────
-print("▸ 4/7 坑位索引与正文同名")
+# ── 4. 坑位索引与正文同名 ──────────────────────────────────────────────────
+print("▸ 4/8 坑位索引与正文同名")
 pitfalls = read("docs/project/PITFALLS.md") or ""
 bodies = re.findall(r"^### (.+)$", pitfalls, re.M)
 bodies = [b.strip() for b in bodies]
@@ -132,7 +134,7 @@ check("正文条目都在索引里", not only_body, f"漏列：{' / '.join(only_
 check("索引条目都在正文里", not only_index, f"正文缺：{' / '.join(only_index)}")
 
 # ── 5. 代码地图与代码双向一致 ──────────────────────────────────────────────
-print("▸ 5/7 CODEMAP 与代码双向一致")
+print("▸ 5/8 CODEMAP 与代码双向一致")
 codemap = read("docs/project/CODEMAP.md") or ""
 
 src_files = {
@@ -182,7 +184,7 @@ missing_methods = [
 check("接口表引用的方法都存在", not missing_methods, f"缺：{', '.join(missing_methods)}")
 
 # ── 6. 行数预算 ────────────────────────────────────────────────────────────
-print("▸ 6/7 行数预算 800")
+print("▸ 6/8 行数预算 800")
 debt = read("docs/project/TECH-DEBT.md") or ""
 over = []
 for path in glob.glob(os.path.join(root, "src/**/*.kt"), recursive=True):
@@ -196,11 +198,30 @@ for rel, n, registered in over:
 if not over:
     check("无文件超预算", True)
 
-# ── 6. 占位符 ──────────────────────────────────────────────────────────────
-print("▸ 7/7 无占位符")
+# ── 7. 占位符 ──────────────────────────────────────────────────────────────
+print("▸ 7/8 无占位符")
 readme = read("README.md") or ""
 marks = [w for w in ("TODO", "TBD", "FIXME", "待补充") if w in readme]
 check("README 无 TODO/TBD/待补充", not marks, f"含：{', '.join(marks)}")
+
+# ── 8. 纯逻辑测试套件 ──────────────────────────────────────────────────────
+# 第四批（路线 A）：四个 tools/Verify*.kt 收进 tools/test.sh，离线约 30 秒。
+# 接进门禁的意义：文档绿但纯函数挂了，同样算没做完。输出只在失败时露出来，
+# 免得每次门禁都刷几十行用例明细（要看明细直接跑 tools/test.sh）。
+print("▸ 8/8 纯逻辑测试套件")
+test_sh = os.path.join(root, "tools/test.sh")
+check("tools/test.sh 存在且可执行",
+      os.path.isfile(test_sh) and os.access(test_sh, os.X_OK))
+proc = subprocess.run(
+    ["bash", "tools/test.sh"], cwd=root,
+    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+)
+if proc.returncode == 0:
+    check("tools/test.sh 全套件离线通过（退出码 0）", True)
+else:
+    tail = "\n".join((proc.stdout or "").splitlines()[-40:])
+    check("tools/test.sh 全套件离线通过（退出码 0）", False,
+          f"退出码 {proc.returncode}，末尾输出：\n{tail}")
 
 # ── 收尾 ───────────────────────────────────────────────────────────────────
 print()

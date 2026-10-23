@@ -1,16 +1,45 @@
 # 测试记录（TESTING）
 
-> 本项目**没有单元测试框架**（见 `TECH-DEBT.md` DEBT-001）。这里记录的是替代门禁：
-> 编译、文档、解析验证、真机冒烟。**编译绿 ≠ 界面对**。
+> 本项目**没有单元测试框架**（见 `TECH-DEBT.md` DEBT-001：Gradle 在本机起不来，
+> `lib/` 里也没有 junit / kotlin-test）。第四批起了**路线 A**的替代机制：
+> Kotlin `main` + 手写断言，零新依赖、离线可跑（见下文「纯逻辑测试机制」）。
+> 这里记录的是替代门禁：编译、文档、纯函数回归、解析验证、真机冒烟。**编译绿 ≠ 界面对**。
 
 ## 门禁清单（按顺序跑）
 
 | # | 命令 | 判据 |
 | --- | --- | --- |
 | 1 | `tools/build.sh` | 退出码 0，输出「编译完成」 |
-| 2 | `tools/docs-check.sh` | 全绿；任何一项 FAIL 都不算完成 |
-| 3 | `tools/verify-history.sh <history.json>` | 事件数 > 0 时，可渲染条目数也必须 > 0 |
-| 4 | 真机装 deb | 菜单有项、桌面有图标、会话能看到消息 |
+| 2 | `tools/docs-check.sh` | 全绿（32 项）；**第 8 节会实跑 `tools/test.sh`**，任何一项 FAIL 都不算完成 |
+| 3 | `tools/test.sh` | 纯逻辑套件全过：`verify-files` 49 + `verify-markdown` 37 + `verify-parity` 82（离线约 30 秒） |
+| 4 | `tools/verify-history.sh <history.json>` | 事件数 > 0 时，可渲染条目数也必须 > 0 |
+| 5 | 真机装 deb | 菜单有项、桌面有图标、会话能看到消息 |
+
+## 纯逻辑测试机制（第四批 · 路线 A，2026-10-23）
+
+**为什么不是 JUnit**：引入测试框架就要引入依赖解析，与"仓库即依赖"的取舍冲突；
+本机 4GB 地址空间也起不来 Gradle。于是每个 `tools/Verify*.kt` 就是一个 `main`
+函数 + 手写断言，由 `tools/verify-*.sh` 用**已入库的 K2JVMCompiler** 直编直跑
+（每个套件 7–8 秒）。鸿蒙那 1013 条 node 断言本质也是这种"无框架断言"。
+
+**统一入口**：`tools/test.sh` 跑全部离线套件（约 30 秒）。传一个 `history.json`
+路径，再跑 `verify-history` 与真实数据模式的 `verify-markdown`（表格形状断言
+在内置用例里没有，必须真实数据才测得到）。
+
+**断言库**：`tools/VerifySupport.kt`，四个套件共用。
+
+- `vcheck(name, ok)` —— 简洁式，通过不打印（门禁里不刷屏）；
+- `vexpect(name, ok)` —— 明细式，每条都打印（要看清覆盖了哪些形状时用）；
+- `vsection(title)` / `vsummary()` —— 分节标题与收尾统计（返回失败数，退出码交给调用方）。
+
+**新增一个纯函数回归**：写 `tools/VerifyXxx.kt`（`main` 里调断言库，直接 import
+`src/main/kotlin/...` 里的纯函数）→ 加一个 `tools/verify-xxx.sh`（照抄现有脚本的
+编译行，把 `VerifySupport.kt` 与新的 `.kt` 一起编）→ 往 `tools/test.sh` 的
+`OFFLINE_SUITES` 加一行。**data 层纯函数禁 import Compose**，否则脚本跑不起来。
+
+**退出码语义**：`test.sh` 0 全过 / 1 有套件失败 / 2 用法错误；各套件另有自己的
+退出码（`verify-markdown` 3 输入不可用 / 4 内置用例失败，`verify-history` 2 回归），
+公共库不统一它们——调用方自己判。
 
 ## 3 的用法
 

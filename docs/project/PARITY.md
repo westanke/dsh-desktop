@@ -80,9 +80,10 @@
 | 方式 | 覆盖 |
 | --- | --- |
 | 编译 | `tools/build.sh` 0 error |
-| 文档门禁 | `tools/docs-check.sh` 30/30 |
-| Markdown 回归 | `tools/verify-markdown.sh` 22 条内置用例全过 |
+| 文档门禁 | `tools/docs-check.sh` 32/32（第 8 节含纯逻辑测试套件） |
+| Markdown 回归 | `tools/verify-markdown.sh` 37 条内置用例全过 |
 | 第二批纯函数回归 | `tools/verify-parity.sh` 82 项：新建会话档位判定 8 项 + 版本比较 / 渠道分流 / `SHA256SUMS` 解析 / 资产挑选 / 说明压平 / 平台与环境探测 28 项 + **schemastery 摊平与字段映射 / 入口过滤 / 密钥三判据 / 夹取 / 人类化 46 项** |
+| 纯逻辑测试机制（第四批） | `tools/test.sh` 统一入口：`verify-files` 49 + `verify-markdown` 37 + `verify-parity` 82 = **168 项**离线断言全过（约 30 秒，docs-check 每次门禁实跑） |
 | 检查更新双渠道联调（开发机） | Gitee / GitHub `releases/latest` 均正确解析（`tag_name` 加 `@SerialName` 后不再静默空串）、挑选到本机适配包、判定不新于 1.0.2；下载 + 进度 + 清单读取 + `sha256OfFile` 实测通过 |
 | 真实服务端（192.168.1.126:3090）截图 | 会话页（模型/推理等级/抽屉开关/附件/权限胶囊）、模型页（50 个供应商）、插件页（已加载 14 · 异常 2） |
 | 打包产物启动 | tar 包解压后**不带任何参数**启动：1–2 s 起窗 1270×790，接真实服务端会话页正常（`shots/parity/r7-startup.png`） |

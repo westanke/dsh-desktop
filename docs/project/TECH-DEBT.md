@@ -28,14 +28,16 @@
 **根因**：Gradle 在本机 4GB 地址空间限制下起不来（见 `PITFALLS.md`），JVM 测试无处安放；
 Gradle 脚手架已从仓库移除，也不再指望它。
 **清账路径**：走「`tools/build.sh` 的编译器 classpath + 独立 main + 断言退出码」这条路，
-把纯函数测试当主程序跑（`tools/verify-*.sh` 已经是这个形态）。下一步是把散落的
-`Verify*.kt` 收成一个目录、让 CI 一次跑完所有用例；真正的 JUnit 仍不做（引入测试框架
-就要引入依赖解析，与本项目"仓库即依赖"的取舍冲突）。
-**当前替代**：`docs-check.sh`（文档/预算）+ `verify-history.sh`（解析形状）+
-`verify-markdown.sh`（Markdown 解析 22 条用例 + 真实数据形状）+
-`verify-files.sh`（文件类型与解码 49 条）+ CI 每 push 必跑前三项中的两项 + 真机冒烟。
+把纯函数测试当主程序跑。**第四批已把这条走通**：`tools/VerifySupport.kt` 公共断言库 +
+`tools/test.sh` 统一入口（files 49 + markdown 37 + parity 82，离线约 30 秒）+
+`docs-check.sh` 第 8 节每次门禁实跑。剩下的是**覆盖面**而非机制：第三批 X1–X6
+（dsh-ui 解析 / @提及 / 统计 / HTML 提取）落地时各自带测；状态机（`AppState`）仍裸奔。
+真正的 JUnit 仍不做（引入测试框架就要引入依赖解析，与本项目"仓库即依赖"的取舍冲突）。
+**当前替代**：`tools/test.sh`（纯函数回归统一入口）+ `docs-check.sh`（文档/预算，
+第 8 节含测试套件）+ `verify-history.sh`（解析形状，需自备 history.json）+ 真机冒烟。
 **收紧记录**：`data/Markdown.kt` 是纯函数且不依赖 Compose，已能用脚本直接跑用例——
-这是全仓第一块"事实上有单测"的代码，后续新纯函数照此办理。
+这是全仓第一块"事实上有单测"的代码；第四批（2026-10-23）把散落的 `Verify*.kt`
+收进公共断言库与统一入口，新增纯函数回归照 `TESTING.md`「纯逻辑测试机制」一节办理。
 
 ### DEBT-002 · 没有 CI
 

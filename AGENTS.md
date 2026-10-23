@@ -48,10 +48,11 @@ tools/build.sh jar          # 再打 build/dsh-desktop.jar
 tools/build.sh run          # 编译后直接开窗口
 tools/package.sh            # 全流程 → dist/dsh-desktop_<ver>_amd64.deb（含桌面入口补齐）
 tools/fetch-platform.sh <p> # 拉取目标平台 skiko 原生库（linux-x64 / linux-arm64 / windows-x64）
-tools/docs-check.sh         # 文档一致性门禁（必须全绿）
+tools/docs-check.sh         # 文档一致性门禁（必须全绿；第 8 节实跑纯逻辑测试套件）
+tools/test.sh               # 纯逻辑测试套件统一入口（离线约 30 秒：files 49 + markdown 37 + parity 82）
 tools/verify-files.sh       # 文件类型判定与解码用例（49 条）
 tools/verify-history.sh <json>   # 用真实历史响应验证解析（防"整页空白"回归）
-tools/verify-markdown.sh <json>  # 验证 Markdown 解析：内置 22 条用例 + 真实会话表形状断言
+tools/verify-markdown.sh <json>  # 验证 Markdown 解析：内置 37 条用例 + 真实会话表形状断言
 python3 tools/mock-server.py     # 离线服务端，端口 3091（别抢 3090）
 ```
 
@@ -199,8 +200,8 @@ JUnit + Gradle 那套无处安放。这是 `TECH-DEBT.md` 的 **DEBT-001**，不
 | 层 | 手段 | 说明 |
 |---|---|---|
 | 编译 | `tools/build.sh` | 每个改动都要过；CI 也跑 |
-| 文档 | `tools/docs-check.sh` | 数值一致、坑位同名、行数预算 |
-| 用例 | `tools/verify-files.sh` / `tools/verify-markdown.sh` | 纯函数断言，CI 上必跑（linux-x64） |
+| 文档 | `tools/docs-check.sh` | 数值一致、坑位同名、行数预算、**纯逻辑测试套件（第 8 节实跑 `tools/test.sh`）** |
+| 用例 | `tools/verify-files.sh` / `tools/verify-markdown.sh` / `tools/verify-parity.sh` | 纯函数断言；统一入口 `tools/test.sh`（断言库 `VerifySupport.kt`），CI 随 docs-check 跑（linux-x64） |
 | 解析 | `tools/verify-history.sh` | 拿真实历史 JSON 跑 `parseHistory`，条目数为 0 即失败（需自备输入，CI 不跑） |
 | 打包 | `tools/package.sh` | 只在发版前跑；三平台由 `release.yml` 覆盖 |
 | 冒烟 | 真机装 deb | **编译绿 ≠ 界面对**。涉及窗口、字体、图标、DPI 的一律要真机看 |

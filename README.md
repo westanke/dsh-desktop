@@ -59,7 +59,8 @@ dsh-desktop/
 │   ├── slim-icons.py           material-icons-extended 瘦身（36 MB → 0.05 MB）
 │   ├── launcher/               启动引导器（自带 runtime 优先，否则国内优先下载）
 │   ├── fetch-platform.sh       按需拉取目标平台的 skiko 原生库
-│   ├── docs-check.sh           文档一致性门禁（28 项）
+│   ├── docs-check.sh           文档一致性门禁（32 项）
+│   ├── test.sh                 纯逻辑测试套件统一入口（离线约 30 秒，docs-check 第 8 节也会跑）
 │   ├── verify-markdown.sh      Markdown 解析用例（表格形状断言）
 │   ├── verify-files.sh         文件类型判定与解码用例
 │   ├── fetch-deps.py           按坐标补传递依赖
@@ -309,7 +310,7 @@ GitHub 的 `mirror-sync.yml` 每 3 小时用 `git push --mirror` 把 Gitee 的 r
 
 | 文件 | 触发 | 干什么 |
 | --- | --- | --- |
-| `.github/workflows/ci.yml` | push 到 `main`、PR、手工 | 编译 + 文档门禁 + 两组纯函数用例（linux-x64），5 分钟内给结论 |
+| `.github/workflows/ci.yml` | push 到 `main`、PR、手工 | 编译 + 文档门禁（第 8 节含纯逻辑测试套件，linux-x64），5 分钟内给结论 |
 | `.github/workflows/release.yml` | push tag `v*`、手工 | 三平台现场构建，每个平台出**完整包 + 轻量包 + 运行时压缩包**：`ubuntu-22.04` 出 amd64 deb、`ubuntu-22.04-arm` 出 arm64 deb、`windows-latest` 出 zip + msi，tag 时自动建 Release 并附 `SHA256SUMS`。v1.0.0 实测：deb 91 MB → 瘦身后 68 MB，轻量 deb 40 MB，zip 96 MB（CI 侧图标同样瘦身） |
 | `.github/workflows/mirror-sync.yml` | 每 3 小时、手工 | ① Gitee → AtomGit → GitHub 单向镜像 refs；② 把 GitHub 最新 Release 搬成 Gitee 发行版 |
 

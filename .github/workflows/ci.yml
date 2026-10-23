@@ -2,6 +2,8 @@ name: CI
 
 # 提交门禁：只做"能不能编译 + 制度文档是否与代码一致 + 纯函数用例是否过"。
 # 不产出安装包（那是 release.yml 的活），所以跑得快，适合每次 push/PR 都跑。
+# 纯函数用例不再单列步骤——docs-check 第 8 节会实跑 tools/test.sh
+# （verify-files / verify-markdown / verify-parity，离线约 30 秒），重复两遍只会拖慢。
 #
 # 为什么只跑 linux-x64：
 #   编译产物与平台无关，跨平台差异全部集中在 skiko 的原生运行时选择上。
@@ -48,14 +50,8 @@ jobs:
       - name: 编译
         run: bash tools/build.sh jar
 
-      - name: 文档门禁
+      - name: 文档门禁（含纯逻辑测试套件）
         run: bash tools/docs-check.sh
-
-      - name: 文件类型与解码用例
-        run: bash tools/verify-files.sh
-
-      - name: Markdown 解析用例
-        run: bash tools/verify-markdown.sh
 
       - name: 汇总产物信息
         if: always()

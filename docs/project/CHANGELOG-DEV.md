@@ -5,6 +5,48 @@
 
 ---
 
+## 开发中 · 第四批：纯逻辑测试机制（batch4，未打 tag）
+
+### 基于什么
+
+`docs/project/inbox/2026-10-23-batch4-purelogic-testing.md`：三端自动化家底实测
+——鸿蒙 1013 条 node 断言、安卓 66 个 `.kt` 测试、桌面 **0**（DEBT-001）。桌面不是
+没防线（`verify-*.sh` 是有效的纯函数断言），但覆盖面靠 shell 撑着，Kotlin 纯函数
+回归没有**同语言、可调试、可结构化**的载体。约定路线 A：**零新依赖**，
+Kotlin `main` + 手写断言，不引 Gradle、不引 junit。
+
+### 干了什么
+
+- `tools/VerifySupport.kt`（新，76 行）：四个套件共用的断言库。`vcheck`（通过不打印，
+  门禁里不刷屏）/ `vexpect`（每条都打印，看清覆盖形状）/ `vsection` / `vsummary`。
+  退出码语义**不统一**——verify-markdown 用 3/4、verify-history 用 2，公共库只负责
+  人话统计，判红交给调用方。
+- 三个套件（`VerifyFileKinds` / `VerifyMarkdown` / `VerifyParity`）迁移到公共库：
+  删掉各自抄的 `failed/passed` 与 `check|expect` 助手，`sed` 批量改名后复跑，
+  用例数与输出逐字不变（files 49 / markdown 37 / parity 82）。`VerifyHistory`
+  **刻意不迁**——它用 stdlib `check(){}`（要 history.json 输入，语义是"回归即抛"），
+  与回归收集式的两套退出码哲学不同。
+- `tools/test.sh`（新）：统一入口，离线跑三个套件（约 30 秒）；传 `history.json`
+  再跑 `verify-history` + 真实数据模式 `verify-markdown`。`set -uo pipefail`
+  **不用 `-e`**——要收齐所有套件结果，不能第一个红就退。退出码 0/1/2，
+  `--help` 从脚本头注释生成。
+- 接进门禁：`tools/docs-check.sh` 新增第 8 节（`test.sh` 存在且可执行 + 实跑退出码 0），
+  文档门禁 30 项 → **32 项**；`ci.yml` 去掉重复的 `verify-files` / `verify-markdown`
+  两步（docs-check 第 8 节已含），CI 反而少两步。
+- 文档同步：TESTING.md 补「纯逻辑测试机制」一节（怎么加新套件、退出码语义）；
+  CODEMAP 加 `test.sh` / `VerifySupport.kt` 两行；PARITY / AGENTS / README /
+  TECH-DEBT（DEBT-001 清账路径的第一步已落地）计数对齐。
+
+### 测了什么
+
+- `tools/test.sh` 全绿：files 49 + markdown 37 + parity 82 = **168 项**；
+  故意写坏用例 / 坏 JSON 实测退出码 1，用法错误退出码 2，`--help` 正常。
+- `docs-check.sh` 32/32（第 8 节实跑套件，约 30 秒）。
+- 顺带纠错：文档里 verify-markdown 内置用例数一直写 22（实际 37，11a55b2 起就没更新过），
+  CODEMAP / PARITY / AGENTS / TECH-DEBT / STATUS / test.sh 注释一并改实。
+
+---
+
 ## 开发中 · 第二批对标 companion 2.2.52（P2-1 / P2-2 / P3，未打 tag）
 
 ### 基于什么
@@ -121,7 +163,7 @@
 
 ### 测了什么
 
-- `build.sh`/`docs-check.sh` 30/30；`verify-markdown.sh` 33 项；`verify-history.sh`
+- `build.sh`/`docs-check.sh` 30/30；`verify-markdown.sh` 37 项；`verify-history.sh`
   真实 298 事件 + `mergeLatestPage` 回归；`verify-ci.sh` 产物校验全绿。
 - **未真机验证**：折叠手感、拖选复制、引用追加、开关切换、正文出图、`:24` 跳行。
 

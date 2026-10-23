@@ -44,7 +44,7 @@ echo "▸ 编译验证程序"
 "$JAVA" -Xmx900m -Xss512k -XX:+UseSerialGC -XX:ActiveProcessorCount=1 \
   -Djava.io.tmpdir="$TMP" -cp "$KC" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -no-reflect -classpath "$CP" -jvm-target 17 \
-  -d "$OUT" "$ROOT/tools/VerifyFileKinds.kt" >/dev/null
+  -d "$OUT" "$ROOT/tools/VerifySupport.kt" "$ROOT/tools/VerifyFileKinds.kt" >/dev/null
 
 echo "▸ 跑内置用例"
 exec "$JAVA" -Xmx512m -XX:+UseSerialGC -XX:ActiveProcessorCount=1 \

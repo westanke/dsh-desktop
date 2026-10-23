@@ -85,10 +85,12 @@
 | `tools/launcher/dsh-desktop.sh` | **启动引导器（Linux）**：自带 runtime 优先 → 用户目录已下载的复用 → 都没有就按国内优先下载（Gitee→GitHub）并校验 sha256，解压后启动；**失败必弹窗 + 写 `~/.cache/dsh-desktop/launcher.log`**（`Terminal=false` 下 stderr 看不见）；`DSH_RUNTIME_HOME` / `DSH_RUNTIME_TARBALL` / `DSH_LAUNCHER_DRY_RUN` / `DSH_LAUNCHER_NO_DIALOG` 兜底与诊断 | 装到 `<安装目录>/bin/dsh-desktop` |
 | `tools/launcher/dsh-desktop.bat` | 同上，Windows 版（curl.exe + tar.exe，Win10 1803+ 自带）；日志 `%LOCALAPPDATA%\dsh-desktop\launcher.log`，双击启动失败会 `pause` | 装到 `<解压目录>/dsh-desktop.bat` |
 | `tools/fetch-platform.sh` | 拉取目标平台的 skiko 原生库：先找本地种子（`lib/` 里那份、以及历史上放在 tools 下的 Windows 那份），再走 Maven，下完用 `zipfile` 校验不是 HTML | 落进平台库里那份 `skiko-awt-runtime-<平台>-0.8.18.jar` |
-| `tools/docs-check.sh` | 文档门禁（30 项） | 退出码 0/1 |
+| `tools/docs-check.sh` | 文档门禁（32 项） | 退出码 0/1 |
+| `tools/test.sh` | 纯逻辑测试套件统一入口：`verify-files` + `verify-markdown` + `verify-parity` 离线跑（约 30 秒）；传 `history.json` 再跑 `verify-history` 与真实数据模式 `verify-markdown` | 退出码 0 全过 / 1 有套件失败 / 2 用法错误 |
+| `tools/VerifySupport.kt` | 四个套件共用的断言库：`vcheck`（通过不打印）/ `vexpect`（每条都打印）/ `vsection` / `vsummary` | — |
 | `tools/verify-history.sh` | 真实历史解析验证（含专用块分布、耗时可算率） | 退出码 0 / 2（回归）/ 3（输入） |
 | `tools/VerifyHistory.kt` | 上面脚本的验证主体 | — |
-| `tools/verify-markdown.sh` | Markdown 解析验证：22 条内置用例 + 真实会话表格形状断言（**至少 1 张表、无空表、每行宽度等于列数**） | 退出码 0 / 2（真实数据形状不对）/ 3（输入不可用）/ 4（内置用例失败） |
+| `tools/verify-markdown.sh` | Markdown 解析验证：37 条内置用例 + 真实会话表格形状断言（**至少 1 张表、无空表、每行宽度等于列数**） | 退出码 0 / 2（真实数据形状不对）/ 3（输入不可用）/ 4（内置用例失败） |
 | `tools/VerifyMarkdown.kt` | 上面脚本的验证主体（直接调 `data/Markdown.kt` 的纯函数） | — |
 | `tools/verify-files.sh` | 文件类型判定与解码验证（49 条用例） | 退出码 0/1 |
 | `tools/verify-parity.sh` | 第二批对标（P2-1/P2-2/P3）纯函数验证：新建会话档位判定 / 版本比较 / 渠道分流 / SHA256SUMS 解析 / 资产挑选 / 更新说明压平 / 平台与环境探测 / **schemastery 摊平与字段映射 / 入口过滤 / 密钥判据 / 夹取** | 退出码 0/1 |
@@ -108,7 +110,7 @@
 
 | 文件 | 触发 | 干什么 | 关键约束 |
 | --- | --- | --- | --- |
-| `ci.yml` | push `main`、PR、手工 | 编译 + `docs-check` + `verify-files` + `verify-markdown`（linux-x64） | **不产安装包**，必须快；红了不许合并 |
+| `ci.yml` | push `main`、PR、手工 | 编译 + `docs-check`（第 8 节实跑 `tools/test.sh`，linux-x64） | **不产安装包**，必须快；红了不许合并 |
 | `release.yml` | push tag `v*`、手工 | 三 job 现场构建（amd64 / arm64 / windows-x64），tag 时建 Release + `SHA256SUMS`，再用 `sync-release-to-gitee.py --local dist` 把产物搬回 Gitee | 手工触发只构建不发布；arm64 必须断言包里带 arm64 skiko；Gitee 搬不动只警告不判红（tag 可能还没镜像过去） |
 | `mirror-sync.yml` | 每 3 小时、手工 | `mirror` job：Gitee（主）→ AtomGit（备）→ GitHub（从）单向 `push --mirror` refs；`releases` job：把 GitHub 最新 Release 搬到 Gitee 发行版（定时补缺） | refs 与 Release 是两码事——`push --mirror` **不搬 Release**，所以必须有第二个 job；用 secret `MIRROR_PAT`，不能用 `github.token`；判据是退出码 |
 
