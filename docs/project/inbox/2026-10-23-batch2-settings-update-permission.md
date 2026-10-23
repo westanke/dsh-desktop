@@ -138,9 +138,23 @@ APP v2.2.45（提交 `a344e3f`）起新建会话时可预选权限档位。桌�
 
 ## 实现回执（workbuddy 完成后回填）
 
-- P2-1：提交 ______，新增/改动文件 ______，真机 bridge 版本 ______，验收逐项 ☐→☑
-- P2-2：提交 ______，产物/校验方案 ______，真机平台 ______
-- P3：提交 ______
-- 门禁结果：build ____ / docs-check ____ / verify-* ____ / 真机冒烟 ____
-- 文档同步：CODEMAP ☐ PARITY ☐ PITFALLS ☐ CHANGELOG-DEV ☐
-- 遗留问题 / 需 lead 再对协议的点：______
+- P2-1：提交 `7da9d5b`（P2-2 在 `acf9167`、P3 在 `7ad6615`），
+  新增/改动文件：`data/SettingsNamespaces.kt`(401) / `AppStateSettingsNamespaces.kt`(146) /
+  `ui/SettingsNamespaces.kt`(494) / `data/ApiExt.kt`(+50) / `AppState.kt`(+9) /
+  `ui/SettingsScreen.kt`(+11) / `tools/VerifyParity.kt`(+206)，
+  真机 bridge 版本 **未填（未连真桥，见"遗留问题"）**，验收逐项：
+  - ☑ 入口只列"可写 + 有可编辑字段 + 非纯 WebUI"的命名空间（`forNativeApp()` 纯函数 + 82 项用例含过滤）；
+  - ☐ 改一个 string/enum/boolean/number 值保存成功，列表就地更新不闪（代码路径完成：成功用 PATCH 返回单对象替换同 ns 项；**待真机**）；
+  - ☐ 密钥位只读、显示已设置状态，提交体不含密钥 path（代码路径完成：三判据只读 + 只在用户真输入新值时才带该 path；**待真机抓包**）；
+  - ☐ 制造 409 → 自动重拉 + 友好提示（代码路径完成：`SETTINGS_CONFLICT` 就地重拉；**待真机**）；
+  - ☑ 老桥/404、缺 settings.read/write → 入口消失或置灰，无红条/报错；503 → 有明确错误提示（`isAbsentOnBridge()` 不含 503；软加载只对 503 toast）；
+  - ☑ schemastery 形态能渲染出可编辑控件（数字 ref id 真实形态样本进 verify-parity；**未连真桥复验**）；标准 JSON Schema 形态也认；
+  - ☑ data 纯函数有 verify 用例；docs-check 30 项全绿；CODEMAP/PARITY/PITFALLS/CHANGELOG 同步。
+- P2-2：提交 `acf9167`，产物/校验方案：下载后 SHA-256 校验（先 `<包名>.sha256` 再 `SHA256SUMS`，不符当场删文件），真机平台 **未填（双渠道联调在开发机过，真机 UI 未走）**
+- P3：提交 `7ad6615`
+- 门禁结果：build 0 error / docs-check 30/30 / verify-parity 82 项 + verify-files 49 项 + verify-markdown 33 项全过 / 真机冒烟 **未做**
+- 文档同步：CODEMAP ☑ PARITY ☑ PITFALLS ☑（新增「内核 schema 是 schemastery，不是 JSON Schema」） CHANGELOG-DEV ☑
+- 遗留问题 / 需 lead 再对协议的点：
+  1. **真机验收全欠**（P2-1/P2-2/P3 都要连真桥 v2.6.0 走一遍，本机无桥环境）；
+  2. `settings/namespaces` 的 ns 值直接进 URL path 未做编码——若真桥出现带斜杠/空格的 ns 需补 `URLEncoder`；
+  3. schemastery 的 `union` 里混非 const 成员时该选项被静默丢掉（与 companion 实现一致），若真桥有这种形态需要确认是否符合预期。
