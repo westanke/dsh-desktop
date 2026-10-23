@@ -3,7 +3,7 @@
 - 日期：2026-10-23
 - 提出方：lead（对标找差距，不写实现）
 - 执行方：workbuddy
-- 状态：**待评估/待实现**（本项是工程改造，先看 workbuddy 的落地方案，再定范围）
+- 状态：**已实现（路线 A）**。纯离线机制已闭环；第三批 X1–X6 各带测等那些功能落地时补（见回执「没做的」）
 - 依据：[`../../../../对齐台账/三端功能互鉴清单.md`](../../../../对齐台账/三端功能互鉴清单.md) 第五节「跨端工程纪律互鉴」
 - 本批性质：**横向互鉴**，不是功能追平。
 
@@ -61,6 +61,26 @@
 
 ## 实现回执（workbuddy 回填）
 
-- 选定路线（A/B 及理由）：
-- 测试命令与用例数：
-- 提交 / 日期：
+- **选定路线**：**A**。`lib/` 里没有任何测试框架 jar，路线 B 要引入依赖解析、与
+  "仓库即依赖"的取舍冲突，且本机 4GB 地址空间起不来 Gradle。路线 A 与现有
+  `verify-*.sh` 完全同构（已入库 K2JVMCompiler 直编直跑，每套件 7–8 秒），零新依赖。
+- **测试命令与用例数**：`bash tools/test.sh`（离线约 30 秒；传 `history.json`
+  再跑 `verify-history` + 真实数据模式 `verify-markdown`）。用例数：
+  `verify-files` **49** + `verify-markdown` **37**（内置）+ `verify-parity` **82**
+  = **168 项**。退出码 0/1/2 实测过：写坏用例 / 坏 JSON → 1，用法错误 → 2，
+  `--help` 正常。验收第 2 条的覆盖：Markdown 解析/表格分隔行/图片/链接行号
+  （verify-markdown 37 项内含）、`classifyChatLink` 行号后缀（同套件）、
+  `mergeLatestPage` 沿用 `verify-history`（需 history.json，**未迁**——它用
+  stdlib `check(){}`「回归即抛」语义，与回归收集式不是一套哲学）。
+- **门禁接入**：`docs-check.sh` 新增第 8 节（`test.sh` 存在且可执行 + 实跑退出码 0），
+  文档门禁 30 → **32 项**；`ci.yml` 去掉重复的 `verify-files` / `verify-markdown`
+  两步。白名单计数与文档已同步：README 28→32、CODEMAP/PARITY/AGENTS/TESTING/TECH-DEBT
+  （DEBT-001 清账路径第一步落地）/STATUS/CHANGELOG-DEV。**顺带纠错**：文档里
+  verify-markdown 内置用例数一直写 22，实测 37（11a55b2 起就没更新过），一并改实。
+- **提交 / 日期**：`984263b`（2026-10-23，18 个文件，+463/−245）。本回执单独提交。
+- **验证结果**：`build.sh` 编译通过；`docs-check.sh` **32/32**；`test.sh` 三套件
+  全绿（49 + 37 + 82）；`--help`、坏路径、坏用例退出码均实测。**未推送、未打 tag**。
+- **没做的**：① 第三批 X1–X6（dsh-ui 解析 / @提及 / 统计 / HTML 提取）各自的
+  用例——等功能落地时按 `TESTING.md`「纯逻辑测试机制」一节补；② `AppState`
+  状态机仍无回归（DEBT-001 残留，涉及 Compose 依赖，不是这轮能清的）；
+  ③ 本项纯离线机制，与真机验收无关（真机欠账仍在第二批回执里）。
