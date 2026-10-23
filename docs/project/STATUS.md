@@ -16,6 +16,12 @@
 本机打 amd64 完整包 + 轻量包 + 运行时；推 Gitee 主源打 tag，镜像到 GitHub 后由
 `release.yml` 出 arm64 deb / Windows zip+msi 并建 Release。
 
+**发行物落地**：GitHub Release 14 个资产（含 `SHA256SUMS`）齐全、非 draft；
+Gitee 发行版覆盖 Linux amd64 四个文件（完整 deb / 轻量 deb / 运行时包 / `SHA256SUMS`，
+本机构建、哈希自洽）+ 源码包——Windows 与 arm64 只在 GitHub 上，发行版说明里已写明。
+原因：GitHub 跑机往 Gitee 传附件会整段卡死（`publish` job 因此超时被判红），
+已改成单件超时 + 重试，详见 `RELEASE.md` ⑥′。
+
 **测了什么**：见下一节三批的验证（docs-check 30/30、verify-markdown 33 项、verify-history 合并回归）。
 
 ---
