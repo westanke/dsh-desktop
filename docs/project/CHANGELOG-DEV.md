@@ -5,6 +5,37 @@
 
 ---
 
+## v1.0.2 · 消息流对齐官方 Web + 自由复制/引用 + 对标 companion 2.2.52 第一批（2026-10-23）
+
+### 基于什么
+
+1.0.1 发布后用户连续提了三轮需求（截图对比官方 Web、无法自由复制、滚动条不明显），
+随后给了 `PARITY-VS-COMPANION-2.2.52.md` 要求对照实现第一批。本轮把 9 个提交收进一个版本。
+
+### 包含什么
+
+- **消息流对齐官方 Web**：`ChatItem.TurnRun` + `foldTurnRuns()` 按轮折叠（一行「已完成，用时 X」）；
+  用户气泡时间 + 复制；统计行居中；消息区右侧细滚动条（内容溢出才显示）。
+- **自由复制与引用**：正文包 `SelectionContainer`（拖选 Ctrl+C）；气泡「引用」按钮把整条消息
+  转 `> 引用块` 追加进输入框（`AppState.composerInsert` 桥）；设置「会话」卡片加
+  「显示上下文注入」开关（`UiPrefs.showContextInjection` 默认关）。
+- **第一批对标 companion 2.2.52**：P0-1 `mergeLatestPage()` 增量合并 + 视口贴底跟随/翻页锚定；
+  P1-1 `MdBlock.Image` + `PathImage()` 正文图片（http/未知/行内图降级链接）；
+  P1-2 `classifyChatLink()` 链接分类 + 行号后缀 + `SourcePane` 按行定位高亮。
+
+### 测了什么
+
+- `build.sh`/`docs-check.sh` 30/30；`verify-markdown.sh` 33 项；`verify-history.sh`
+  真实 298 事件 + `mergeLatestPage` 回归；`verify-ci.sh` 产物校验全绿。
+- **未真机验证**：折叠手感、拖选复制、引用追加、开关切换、正文出图、`:24` 跳行。
+
+### 发版动作
+
+推 Gitee main + `v1.0.2` tag → mirror 到 GitHub → `release.yml` 三平台构建 →
+GitHub Release + Gitee 发行版（`sync-release-to-gitee` / mirror-sync 补）。
+
+---
+
 ## v1.0.1 后续 3 · 第一批对标 companion 2.2.52（2026-10-23，未打 tag）
 
 ### 改了哪些文件

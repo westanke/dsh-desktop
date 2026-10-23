@@ -45,6 +45,9 @@
 | CHAT-013 | in-progress | 会话统计已做（轮次/工具次数/失败数/思考段/产出数，消息区顶部一行）；**轨迹（按轮次时间轴）未做** |
 | CHAT-014 | in-progress | 工具专用块：read 路径头、bash `$ cmd`+剥 ANSI 输出、edit/write `-`/`+` 对照；真实数据命中 30/37、21/24、40/42。**行号列未单独渲染**（内核已带 `N: ` 前缀，直接用） |
 | CHAT-015 | in-progress | 交付物卡片（文件名 + 描述，点击经 `roots/resolve` 定位到文件页） |
+| CHAT-016 | in-progress | 按轮折叠 TurnRun（「已完成，用时 X ⌄」）+ 用户气泡时间/复制/引用 + 统计居中 + 消息区细滚动条。**待真机验收** |
+| CHAT-017 | in-progress | 正文 Markdown 图片（`MdBlock.Image` + `PathImage()`，http/未知/行内图降级链接）；自由选择复制 + 上下文注入显示开关（设置，默认关）。**待真机验收** |
+| CHAT-018 | in-progress | 文件链接应用内定位 + 行号后缀（`:24`/`#L24`）+ `SourcePane` 按行高亮；刷新历史增量合并（`mergeLatestPage`）不抹更早页。**待真机验收** |
 
 ## 四、文件
 

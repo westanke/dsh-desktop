@@ -1,8 +1,22 @@
 # 状态（STATUS）
 
-- 日期：**2026-10-22**
-- 版本：**1.0.1**（`v1.0.1` tag 打进；1.0.0 的 Release 由 GitHub 现场构建，产物已**同步回 Gitee 主源**）
+- 日期：**2026-10-23**
+- 版本：**1.0.2**（`v1.0.2` tag；1.0.1 之后 9 个未发版提交一并打进，Release 由 GitHub 现场构建并同步回 Gitee 主源）
 - 平台：UOS / Deepin x64 与 arm64（deb）、Windows x64（zip + msi）
+
+---
+
+## v1.0.2 · 发版（2026-10-23）
+
+**基于什么**：用户「发版」。1.0.1 之后积了 9 个提交：消息流对齐官方 Web（TurnRun 按轮折叠、
+气泡时间+复制、统计居中、消息区细滚动条）、自由复制与引用到发言、上下文注入开关、
+第一批对标 companion 2.2.52（P0-1/P1-1/P1-2）。
+
+**干了什么**：`version.txt` 1.0.1 → 1.0.2，`VERSION_FALLBACK` 与 README 产物名同步；
+本机打 amd64 完整包 + 轻量包 + 运行时；推 Gitee 主源打 tag，镜像到 GitHub 后由
+`release.yml` 出 arm64 deb / Windows zip+msi 并建 Release。
+
+**测了什么**：见下一节三批的验证（docs-check 30/30、verify-markdown 33 项、verify-history 合并回归）。
 
 ---
 

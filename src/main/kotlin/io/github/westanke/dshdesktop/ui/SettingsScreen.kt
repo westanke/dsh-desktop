@@ -47,7 +47,7 @@ import io.github.westanke.dshdesktop.ConnectionState
  * 跟着 `version.txt` 走）；直接跑 `build/classes` 时读不到 manifest，才回落这个常量。
  * 常量由 `tools/docs-check.sh` 与 `version.txt` 对齐，漂了 CI 会红。
  */
-private const val VERSION_FALLBACK = "1.0.1"
+private const val VERSION_FALLBACK = "1.0.2"
 
 // 拿 manifest 得有一个类做锚点：`SettingsScreen` 是函数不是类，这里借 AppState（同一个 jar）
 private val appVersion: String by lazy {
