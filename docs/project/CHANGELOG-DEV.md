@@ -5,6 +5,37 @@
 
 ---
 
+## 开发中 · 设备身份上报头 X-Dsh-Device（桥投单，未打 tag）
+
+### 基于什么
+
+`docs/project/inbox/2026-10-23-device-identity-header.md`：桥 v2.6.1 起在认证路径上
+解析 `X-Dsh-Device: <platform>/<model>`，把配对占位名「Mobile device」换成
+「平台 · 型号」。起因是鸿蒙手机在桥的设备表里被登记成「Android 设备」，
+8 条同名记录谁都不认识谁。
+
+### 干了什么
+
+- `data/DshApi.kt`（874→916）：两处加头——`DshWorkspaceClient.request()` 的
+  带鉴权分支（REST 全走这里）与 `EventSubscription.connect()`（WebSocket）；
+  新增顶层 `deviceIdentity()`：os.name → windows/macos/linux（**桥的白名单值，
+  写错会被整条丢弃，静默丢身份**），model 取 os.version。
+- `DeviceView` 加 `platform` / `model` / `nameSource` 三个可空字段（老桥没有，
+  `ignoreUnknownKeys` 早已开着，向前兼容）；设置页设备卡多一行「平台 / 型号」，
+  桥没回传就不画。
+- **免鉴权请求刻意不加**：配对与 health 那一刻还没有"设备"可标识，桥也只认认证路径。
+- OkHttp 默认 UA 是 `okhttp/x.y.z`，没有任何平台信息——桌面端想有平台名只能靠这个头。
+
+### 测了什么
+
+- `tools/verify-parity.sh` 133 项（+5）：platform 映射三态 + os.name 大小写不敏感 +
+  版本全空白只给平台；System 属性改完 finally 还原。
+- `build.sh`、`docs-check.sh` 32/32、`test.sh` 219 项全绿。
+- **未真机验证**：需装新桥 2.6.1（桥侧改动 `2c5893b` 未发版）后连一次，
+  在本机 WebUI 设备页看名字变成「平台 · 型号」+「自动识别」徽标。
+
+---
+
 ## 开发中 · 第三批 X9 阶段一：DSH1 配置导入（未打 tag）
 
 ### 基于什么

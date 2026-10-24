@@ -173,6 +173,12 @@ fun SettingsScreen(state: AppState) {
                 Spacer(Modifier.height(12.dp))
                 InfoRow("已授权根目录", "${(device?.rootIds ?: state.profile.rootIds).size} 个")
                 InfoRow("设备 ID", device?.id ?: state.profile.deviceId.ifBlank { "—" }, mono = true)
+                // 桥 2.6.1 起按 X-Dsh-Device 头回传的身份；老桥没这字段，整行不画
+                val devicePlatform = device?.platform?.trim()?.takeIf { it.isNotEmpty() }
+                val deviceModel = device?.model?.trim()?.takeIf { it.isNotEmpty() }
+                if (devicePlatform != null || deviceModel != null) {
+                    InfoRow("平台 / 型号", listOfNotNull(devicePlatform, deviceModel).joinToString(" · "))
+                }
             }
 
             // ── 外观 ─────────────────────────────────────────────

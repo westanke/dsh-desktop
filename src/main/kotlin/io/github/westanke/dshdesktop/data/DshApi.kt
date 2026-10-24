@@ -46,6 +46,15 @@ data class DeviceView(
     val name: String,
     val scopes: List<String>,
     val rootIds: List<String>,
+    /**
+     * 桥 2.6.1 起回传的设备身份——客户端发 `X-Dsh-Device` 头换来的
+     * （见 inbox `2026-10-23-device-identity-header.md`）。
+     * 老桥没有这三个字段：可空默认值 + `ignoreUnknownKeys`，序列化向前兼容。
+     */
+    val platform: String? = null,
+    val model: String? = null,
+    /** `detected` = 桥自动识别 · `manual` = 用户手工改名（永不被自动名覆盖）。 */
+    val nameSource: String? = null,
 )
 
 @Serializable
@@ -279,6 +288,29 @@ class WorkspaceApiException(
     val code: String,
     override val message: String,
 ) : RuntimeException(message)
+
+/**
+ * 设备身份头的值：`<platform>/<model>`。
+ *
+ * 桥 2.6.1 起在**认证路径**上解析它，把配对占位名「Mobile device」换成
+ * 「平台 · 型号」（需求见 inbox `2026-10-23-device-identity-header.md`）。
+ *
+ * - `platform` 必须在桥的白名单里（android / harmonyos / ios / ipados / web /
+ *   windows / macos / linux）；不在名单内的值会被桥**整条丢弃**，
+ *   所以这里只产名单内的值——别"顺手"加 `win` / `osx` 这类变体；
+ * - `model` 用操作系统版本号，比 `unknown` 有用（桥只做控制字符清洗与 60 字符截断）；
+ * - 头只加在**带鉴权**的请求上：配对与 health 免鉴权，那一刻还没有"设备"可标识。
+ */
+fun deviceIdentity(): String {
+    val os = System.getProperty("os.name").orEmpty()
+    val platform = when {
+        os.startsWith("Windows", ignoreCase = true) -> "windows"
+        os.startsWith("Mac", ignoreCase = true) -> "macos"
+        else -> "linux"
+    }
+    val model = System.getProperty("os.version").orEmpty().trim()
+    return if (model.isEmpty()) platform else "$platform/$model"
+}
 
 class DshWorkspaceClient(
     apiBase: String,
@@ -648,7 +680,12 @@ class DshWorkspaceClient(
 
     private fun request(url: HttpUrl, authenticated: Boolean = true): Request.Builder {
         val builder = Request.Builder().url(url).header("Accept", "application/json")
-        if (authenticated) builder.header("Authorization", "Bearer ${requireNotNull(token) { "A device token is required." }}")
+        if (authenticated) {
+            builder.header("Authorization", "Bearer ${requireNotNull(token) { "A device token is required." }}")
+            // 桥靠它在认证路径上认设备：没有这个头，OkHttp 默认 UA（okhttp/x.y.z）里
+            // 没有任何平台信息，桥只能留着「Mobile device」占位名。老桥忽略未知头，无害。
+            builder.header("X-Dsh-Device", deviceIdentity())
+        }
         return builder
     }
 
@@ -740,7 +777,12 @@ class EventSubscription internal constructor(
 
     private fun connect() {
         if (closed.get()) return
-        val request = Request.Builder().url(url).header("Authorization", "Bearer $token").build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            // 事件流同样在认证路径上：桥认得出是谁在收事件，设备名才保持一致
+            .header("X-Dsh-Device", deviceIdentity())
+            .build()
         socket = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 attempts = 0

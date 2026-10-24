@@ -6,6 +6,22 @@
 
 ---
 
+## 未打版 · 设备身份上报头 X-Dsh-Device（2026-10-24）
+
+**基于什么**：桥投单（inbox `2026-10-23-device-identity-header.md`）——桥 2.6.1 起
+按 `X-Dsh-Device: <platform>/<model>` 头把设备名从占位的「Mobile device」换成
+「平台 · 型号」。
+
+**干了什么**：`DshApi.kt` 两处加头（REST `request()` 带鉴权分支 + WebSocket
+`connect()`）+ 顶层 `deviceIdentity()`（白名单值 windows/macos/linux）；
+`DeviceView` 加 platform/model/nameSource 可空字段；设置页设备卡多一行
+「平台 / 型号」（桥没回传不画）。
+
+**测了什么**：`verify-parity.sh` 133 项（+5 映射用例）；build / docs-check 32/32 /
+test.sh 219 全绿。**未真机验证**：需新桥 2.6.1（桥侧未发版）连一次看 WebUI 设备页。
+
+---
+
 ## 未打版 · 第三批 X9 阶段一：DSH1 配置导入（2026-10-23）
 
 **基于什么**：batch3 交接单 X9（原标「先评估」）。lead 独立评估结论：阶段一导入

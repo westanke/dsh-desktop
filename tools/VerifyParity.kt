@@ -11,6 +11,7 @@ import io.github.westanke.dshdesktop.data.ConnectionShare
 import io.github.westanke.dshdesktop.data.canWriteSettingsNamespaces
 import io.github.westanke.dshdesktop.data.channelForLanguage
 import io.github.westanke.dshdesktop.data.clampSettingsNumber
+import io.github.westanke.dshdesktop.data.deviceIdentity
 import io.github.westanke.dshdesktop.data.detectArch
 import io.github.westanke.dshdesktop.data.detectPlatform
 import io.github.westanke.dshdesktop.data.forNativeApp
@@ -506,11 +507,38 @@ private fun verifyDsh1Import() {
     vcheck("无 token → null（仍需配对码）", leanImported.token == null)
 }
 
+// ── 设备身份头：platform 必须落在桥的白名单里 ──────────────────────────────
+
+private fun verifyDeviceIdentity() {
+    vsection("设备身份头（X-Dsh-Device）")
+    // 桥对不在白名单里的 platform 是**整条丢弃**——映射写错不会报错，只会静默丢身份，
+    // 所以这几个值（windows / macos / linux）当契约钉住。
+    val osName = System.getProperty("os.name")
+    val osVersion = System.getProperty("os.version")
+    try {
+        System.setProperty("os.name", "Windows 11")
+        System.setProperty("os.version", "10.0")
+        vcheck("Windows → windows/10.0", deviceIdentity() == "windows/10.0")
+        System.setProperty("os.name", "Mac OS X")
+        vcheck("macOS → macos/10.0", deviceIdentity() == "macos/10.0")
+        System.setProperty("os.name", "Linux")
+        vcheck("Linux → linux/10.0", deviceIdentity() == "linux/10.0")
+        System.setProperty("os.name", "linux")
+        vcheck("os.name 大小写不敏感", deviceIdentity() == "linux/10.0")
+        System.setProperty("os.version", "   ")
+        vcheck("版本全空白 → 只给平台", deviceIdentity() == "linux")
+    } finally {
+        if (osName != null) System.setProperty("os.name", osName)
+        if (osVersion != null) System.setProperty("os.version", osVersion)
+    }
+}
+
 fun main() {
     println("▸ 对标纯函数用例")
     verifyNewSessionPreset()
     verifyUpdateChecker()
     verifySettingsNamespaces()
     verifyDsh1Import()
+    verifyDeviceIdentity()
     if (vsummary() > 0) kotlin.system.exitProcess(1)
 }
