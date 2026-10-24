@@ -24,7 +24,10 @@ schema 驱动的通用设置命名空间表单（P2-1，schemastery 摊平三层
   发布当场同步回 Gitee 主源。
 - **Gitee 附件 1 GB 配额**：只保留最新一个完整版本，不够就删最旧发行版
   （GitHub 留历史），详见 `RELEASE.md` ⑥′。
-- **发行物落地**：tag 推送后由 CI 发布，结果回填于 STATUS「v1.0.3 · 发版」节。
+- **发行物落地**：GitHub Release v1.0.3 14 个资产齐全、非 draft；Gitee 主源 Linux x64
+  三件套 + `SHA256SUMS` + 源码包已落地（哈希流式比对全部成功），剩余 9 个 CI 产物由
+  `mirror-sync` 每 3 小时补缺（跑机→Gitee 大包上传 240s 写超时的老毛病，先保 Linux 主线）。
+  Gitee 附件 1GB 配额：删最旧的 v1.0.1 发行版腾位（GitHub 留历史）。
 
 ### 测了什么
 

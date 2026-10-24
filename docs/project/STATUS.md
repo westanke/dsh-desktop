@@ -16,8 +16,14 @@ P2-2 检查更新（六态 + 双渠道）、P2-1 schema 命名空间表单、X9 
 本机打 amd64 完整包 + 轻量包 + 运行时；推 Gitee 主源 + AtomGit 备源打 tag，
 镜像到 GitHub 后 `release.yml` 出 arm64 deb / Windows zip + msi 并建 Release。
 
-**发行物落地**：tag 推送后由 CI 发布——GitHub Release 资产数与 Gitee 同步结果，
-发布完成后回填（Gitee 附件 1 GB 配额，只保留最新一个完整版本）。
+**发行物落地**：GitHub Release v1.0.3 **14 个资产齐全**、非 draft（amd64 / arm64 完整+轻量 deb、
+三平台运行时包、Windows zip / msi、`SHA256SUMS`）。Gitee 主源侧：Linux x64 三件套
+（完整 deb 69M / 轻量 deb 41M / 运行时 29M）+ `.sha256` + `SHA256SUMS` + 源码包已落地，
+流式拉取哈希与本地逐一比对**全部成功**；剩余 9 个 CI 产物（arm64 deb ×2、三平台运行时、
+Windows zip / lite / msi）由 `mirror-sync` 的 releases 作业每 3 小时补缺——跑机→Gitee
+大包上传会 240s 写超时（v1.0.2 老毛病，见 `RELEASE.md` ⑥′），故先保 Linux x64 主线可用。
+**Gitee 附件 1GB 配额**：删除了最旧的 v1.0.1 发行版（GitHub 仍有历史），现保留
+v1.0.2（16 资产）+ v1.0.3。
 
 **测了什么**：`build.sh` 0 error；`docs-check.sh` 32/32；`test.sh` 219 项
 （verify-files 49 + verify-markdown 37 + verify-parity 133）。
