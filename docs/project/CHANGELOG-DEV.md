@@ -5,6 +5,37 @@
 
 ---
 
+## v1.0.3 · 发版（2026-10-24）
+
+### 基于什么
+
+用户「打包 推+发」。1.0.2 之后积了 11 个提交、四批活儿一并打进：
+新建会话预选权限档位（P3）、应用内检查更新（P2-2，六态 + 双渠道逐段比版本）、
+schema 驱动的通用设置命名空间表单（P2-1，schemastery 摊平三层降级）、
+第三批 X9 阶段一 DSH1 配置导入、第四批纯逻辑测试机制
+（公共断言库 + `test.sh` 统一入口 + 接进 docs-check 第 8 节）、
+设备身份上报头 `X-Dsh-Device`。
+
+### 干了什么
+
+- `version.txt` 1.0.2 → 1.0.3，`VERSION_FALLBACK` 与 README 产物名同步。
+- 本机打 amd64 完整包 + 轻量包 + 运行时压缩包；推 Gitee 主源与 AtomGit 备源打 tag，
+  镜像到 GitHub 后由 `release.yml` 出 arm64 deb / Windows zip + msi 并建 Release，
+  发布当场同步回 Gitee 主源。
+- **Gitee 附件 1 GB 配额**：只保留最新一个完整版本，不够就删最旧发行版
+  （GitHub 留历史），详见 `RELEASE.md` ⑥′。
+- **发行物落地**：tag 推送后由 CI 发布，结果回填于 STATUS「v1.0.3 · 发版」节。
+
+### 测了什么
+
+- 门禁：`build.sh` 0 error；`docs-check.sh` 32/32；`test.sh` 219 项
+  （verify-files 49 + verify-markdown 37 内置 + verify-parity 133）。
+- **未真机验证**：X9 三条路径（带令牌/无令牌/坏文本）、第二批三项
+  （命名空间 409 + 密钥、检查更新六态、档位胶囊）、设备身份头（需新桥 2.6.1）
+  均待真机验收；装机冒烟由用户执行。
+
+---
+
 ## 开发中 · 设备身份上报头 X-Dsh-Device（桥投单，未打 tag）
 
 ### 基于什么

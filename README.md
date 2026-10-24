@@ -108,7 +108,7 @@ Windows 日志在 `%LOCALAPPDATA%\dsh-desktop\launcher.log`（双击启动时控
 ### 3.1 UOS / Deepin：安装 deb（推荐）
 
 ```bash
-sudo dpkg -i dist/dsh-desktop_1.0.2-1_amd64.deb
+sudo dpkg -i dist/dsh-desktop_1.0.3-1_amd64.deb
 # 依赖不全时
 sudo apt-get -f install
 ```
@@ -143,7 +143,7 @@ sudo dpkg -r dsh-desktop
 
 ```bash
 mkdir -p ~/apps/dsh-desktop
-tar -xzf dist/dsh-desktop-1.0.2-portable-linux-x64.tar.gz -C ~/apps/dsh-desktop
+tar -xzf dist/dsh-desktop-1.0.3-portable-linux-x64.tar.gz -C ~/apps/dsh-desktop
 ~/apps/dsh-desktop/run.sh
 ```
 
@@ -157,13 +157,13 @@ tar -xzf dist/dsh-desktop-1.0.2-portable-linux-x64.tar.gz -C ~/apps/dsh-desktop
 ./tools/build.sh          # 只编译到 build/classes
 ./tools/build.sh jar      # 再打 build/dsh-desktop.jar
 ./tools/build.sh run      # 编译后直接开窗口
-./tools/package.sh        # 全流程 → dist/dsh-desktop_1.0.1-1_amd64.deb
+./tools/package.sh        # 全流程 → dist/dsh-desktop_1.0.3-1_amd64.deb
 ```
 
 arm64 机器上（或想交叉准备运行时）先拉一次对应平台的原生库，再打包：
 
 ```bash
-./tools/fetch-platform.sh linux-arm64   # → dist/dsh-desktop_1.0.2-1_arm64.deb
+./tools/fetch-platform.sh linux-arm64   # → dist/dsh-desktop_1.0.3-1_arm64.deb
 ```
 
 > 本项目**不用 Gradle**：`tools/build.sh` 直接调 `K2JVMCompiler`，并把 Compose / 序列化编译器插件通过 `-Xplugin` 挂上。原因见 `AGENTS.md` 第 2 节——受限环境里 Gradle 在配置阶段就会耗尽地址空间，而且没有包管理器时"仓库里有什么就编译出什么"更可复现。
@@ -186,7 +186,7 @@ build-windows.bat run        rem 编译后直接启动
 - Python 3（命令行名 `python` / `py` 均可）
 - WiX Toolset 3.x（可选，只有想出 msi 才需要）
 
-产物：`dist\dsh-desktop-1.0.2-windows-x64.zip`（有 WiX 时另出同名 msi）。
+产物：`dist\dsh-desktop-1.0.3-windows-x64.zip`（有 WiX 时另出同名 msi）。
 
 ---
 
@@ -344,8 +344,8 @@ python3 scripts/ci/sync-release-to-gitee.py --tag v1.0.0
 # 2. 门禁与打包自测
 tools/docs-check.sh && tools/package.sh
 # 3. 提交 → 打 tag → 推主源
-git commit -am "chore: bump to 1.0.2"
-git tag -a v1.0.2 -m "DSH Desktop 1.0.2"
+git commit -am "chore: bump to 1.0.3"
+git tag -a v1.0.3 -m "DSH Desktop 1.0.3"
 git push gitee main --tags
 # 4. mirror-sync 把 tag 搬到 GitHub，release.yml 随即构建并发布
 gh run watch --repo westanke/dsh-desktop

@@ -1,8 +1,28 @@
 # 状态（STATUS）
 
-- 日期：**2026-10-23**
-- 版本：**1.0.2**（`v1.0.2` tag；1.0.1 之后 9 个未发版提交一并打进，Release 由 GitHub 现场构建并同步回 Gitee 主源）
+- 日期：**2026-10-24**
+- 版本：**1.0.3**（`v1.0.3` tag；1.0.2 之后 11 个未发版提交一并打进，Release 由 GitHub 现场构建并同步回 Gitee 主源）
 - 平台：UOS / Deepin x64 与 arm64（deb）、Windows x64（zip + msi）
+
+---
+
+## v1.0.3 · 发版（2026-10-24）
+
+**基于什么**：用户「打包 推+发」。1.0.2 之后 11 个提交：P3 权限档预选、
+P2-2 检查更新（六态 + 双渠道）、P2-1 schema 命名空间表单、X9 阶段一 DSH1 导入、
+第四批纯逻辑测试机制、设备身份头 `X-Dsh-Device`。
+
+**干了什么**：`version.txt` 1.0.2 → 1.0.3，`VERSION_FALLBACK` 与 README 产物名同步；
+本机打 amd64 完整包 + 轻量包 + 运行时；推 Gitee 主源 + AtomGit 备源打 tag，
+镜像到 GitHub 后 `release.yml` 出 arm64 deb / Windows zip + msi 并建 Release。
+
+**发行物落地**：tag 推送后由 CI 发布——GitHub Release 资产数与 Gitee 同步结果，
+发布完成后回填（Gitee 附件 1 GB 配额，只保留最新一个完整版本）。
+
+**测了什么**：`build.sh` 0 error；`docs-check.sh` 32/32；`test.sh` 219 项
+（verify-files 49 + verify-markdown 37 + verify-parity 133）。
+**未真机验证**：X9 三条路径、第二批三项、设备身份头（需新桥 2.6.1）；
+装机冒烟由用户执行。
 
 ---
 
